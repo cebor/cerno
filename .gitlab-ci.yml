@@ -7,6 +7,7 @@ stages: [test]
 rust:
   stage: test
   image: rust:latest # stable, edition 2024
+  tags: [local]
   variables:
     CARGO_HOME: $CI_PROJECT_DIR/.cargo
   cache:
