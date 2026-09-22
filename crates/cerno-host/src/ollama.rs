@@ -187,7 +187,7 @@ impl ModelHost for OllamaHost {
         }
 
         if status >= 400 {
-            return Err(HostError::Status { status, body: text });
+            return Err(HostError::status(status, text));
         }
 
         parse_distribution(&text, &req.model, started.elapsed())

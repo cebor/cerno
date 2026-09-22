@@ -161,6 +161,24 @@ pub enum HostError {
     Protocol(String),
 }
 
+/// How much of a failed response's body travels on in the error. The whole body is logged; the
+/// error reaches the caller of the service, and an upstream body can carry account or request
+/// details that are the operator's business, not theirs.
+const MAX_ERROR_BODY: usize = 300;
+
+impl HostError {
+    /// A non-success status from the host, with its body logged in full and kept short.
+    fn status(status: u16, body: String) -> Self {
+        tracing::warn!(status, body = %body, "host answered with an error");
+
+        let body = match body.char_indices().nth(MAX_ERROR_BODY) {
+            Some((cut, _)) => format!("{}…", &body[..cut]),
+            None => body,
+        };
+        Self::Status { status, body }
+    }
+}
+
 #[async_trait]
 pub trait ModelHost: Send + Sync {
     fn capabilities(&self) -> HostCapabilities;
@@ -210,6 +228,30 @@ mod tests {
         assert_eq!(HostKind::Vllm.default_url(), "http://localhost:8000/v1");
         assert_eq!(HostKind::LlamaCpp.default_url(), "http://localhost:8080/v1");
         assert_eq!(HostKind::LmStudio.default_url(), "http://localhost:1234/v1");
+    }
+
+    #[test]
+    fn a_long_error_body_is_cut_short() {
+        let HostError::Status { body, .. } = HostError::status(400, "x".repeat(5000)) else {
+            panic!()
+        };
+
+        assert_eq!(
+            body.chars().count(),
+            MAX_ERROR_BODY + 1,
+            "300 characters and an ellipsis"
+        );
+        assert!(body.ends_with('…'));
+    }
+
+    #[test]
+    fn a_short_error_body_is_kept_whole() {
+        let HostError::Status { body, .. } = HostError::status(404, "model not found".into())
+        else {
+            panic!()
+        };
+
+        assert_eq!(body, "model not found");
     }
 
     #[test]
