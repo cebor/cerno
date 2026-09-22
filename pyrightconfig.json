@@ -1,0 +1,7 @@
+{
+  "include": ["sdks/python/src", "sdks/python/tests"],
+  "venvPath": "sdks/python",
+  "venv": ".venv",
+  "extraPaths": ["sdks/python/src"],
+  "typeCheckingMode": "standard"
+}

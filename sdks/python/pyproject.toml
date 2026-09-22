@@ -17,6 +17,10 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/cerno"]
 
+# Type checking is configured in ../../pyrightconfig.json, at the workspace root, because that
+# is where an editor or language server starts. A [tool.pyright] section here is only read when
+# pyright runs from this directory, which is not how anyone actually checks this package.
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
