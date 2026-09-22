@@ -4,8 +4,9 @@ members = [
     "crates/cerno-types",
     "crates/cerno-host",
     "crates/cerno-core",
-    "crates/cerno-bench",
     "crates/cerno-server",
+    "crates/cerno-sdk",
+    "crates/cerno-bench",
 ]
 
 [workspace.package]

@@ -213,6 +213,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cerno-sdk"
+version = "0.1.0"
+dependencies = [
+ "cerno-types",
+ "mockito",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "cerno-server"
 version = "0.1.0"
 dependencies = [
