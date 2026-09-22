@@ -4,6 +4,8 @@ use crate::{FirstTokenDistribution, FirstTokenRequest, HostCapabilities, HostErr
 use async_trait::async_trait;
 use serde::Serialize;
 use serde_json::Value;
+use std::collections::HashSet;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 /// Ollama reports at most this many ranked tokens per position; the server rejects more with
@@ -68,6 +70,9 @@ pub struct OllamaHost {
     client: reqwest::Client,
     base_url: String,
     timeout: Duration,
+    /// Models that have refused `think` once. They are asked without it from then on, so the
+    /// refusal costs one extra round trip per model rather than one per question.
+    refused_thinking: Mutex<HashSet<String>>,
 }
 
 impl OllamaHost {
@@ -80,6 +85,7 @@ impl OllamaHost {
             client,
             base_url: base_url.into().trim_end_matches('/').to_string(),
             timeout,
+            refused_thinking: Mutex::default(),
         })
     }
 
@@ -159,13 +165,24 @@ impl ModelHost for OllamaHost {
     ) -> Result<FirstTokenDistribution, HostError> {
         let started = Instant::now();
 
-        let (mut status, mut text) = self.post(&self.body(&req, Some(false))).await?;
+        let known_to_reject = self
+            .refused_thinking
+            .lock()
+            .expect("lock is never poisoned")
+            .contains(&req.model);
+        let think = if known_to_reject { None } else { Some(false) };
 
-        if status >= 400 && rejects_thinking(&text) {
+        let (mut status, mut text) = self.post(&self.body(&req, think)).await?;
+
+        if think.is_some() && status >= 400 && rejects_thinking(&text) {
             tracing::debug!(
                 model = %req.model,
-                "model rejects the think flag; retrying without it"
+                "model rejects the think flag; retrying without it, and from now on"
             );
+            self.refused_thinking
+                .lock()
+                .expect("lock is never poisoned")
+                .insert(req.model.clone());
             (status, text) = self.post(&self.body(&req, None)).await?;
         }
 
@@ -361,5 +378,50 @@ mod tests {
 
         assert_eq!(json["top_logprobs"], 20);
         assert!(json.get("keep_alive").is_none());
+    }
+
+    /// A model without a thinking mode refuses `think`. The first question pays for one retry;
+    /// every later question to that model goes out without the field straight away.
+    #[tokio::test]
+    async fn a_refused_think_flag_is_remembered_per_model() {
+        let mut server = mockito::Server::new_async().await;
+        let refused = server
+            .mock("POST", "/api/chat")
+            .match_body(mockito::Matcher::PartialJson(
+                serde_json::json!({"think": false}),
+            ))
+            .with_status(400)
+            .with_body(r#"{"error":"registry.ollama.ai/library/x does not support thinking"}"#)
+            .expect(1)
+            .create_async()
+            .await;
+        let answered = server
+            .mock("POST", "/api/chat")
+            // Only a body without the switch is answered. Without this guard mockito would hand a
+            // repeated switch to this mock once the refusal had been used up, and the test
+            // would pass whether or not the refusal was remembered.
+            .match_request(|request| {
+                !request
+                    .utf8_lossy_body()
+                    .is_ok_and(|body| body.contains(r#""think""#))
+            })
+            .with_body(REAL_RESPONSE)
+            .expect(2)
+            .create_async()
+            .await;
+        let host = OllamaHost::new(server.url(), Duration::from_secs(5)).unwrap();
+        let req = FirstTokenRequest {
+            model: "m".into(),
+            system: None,
+            user: "usr".into(),
+            top_logprobs: 20,
+            keep_alive: None,
+        };
+
+        host.first_token(req.clone()).await.unwrap();
+        host.first_token(req).await.unwrap();
+
+        refused.assert_async().await;
+        answered.assert_async().await;
     }
 }

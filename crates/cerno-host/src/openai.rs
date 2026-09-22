@@ -7,6 +7,8 @@
 use crate::{FirstTokenDistribution, FirstTokenRequest, HostCapabilities, HostError, ModelHost};
 use async_trait::async_trait;
 use serde_json::{Map, Value, json};
+use std::collections::HashSet;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 /// OpenAI rejects more than this, and it is vLLM's default `--max-logprobs`. Past 20 there are
@@ -75,6 +77,9 @@ pub struct OpenAiCompatHost {
     api_key: Option<String>,
     flavour: Flavour,
     timeout: Duration,
+    /// Models that have refused the thinking switch once. They are asked without it from then
+    /// on, so the refusal costs one extra round trip per model rather than one per question.
+    refused_thinking: Mutex<HashSet<String>>,
 }
 
 impl OpenAiCompatHost {
@@ -95,6 +100,7 @@ impl OpenAiCompatHost {
             api_key,
             flavour,
             timeout,
+            refused_thinking: Mutex::default(),
         })
     }
 
@@ -182,14 +188,24 @@ impl ModelHost for OpenAiCompatHost {
     ) -> Result<FirstTokenDistribution, HostError> {
         let started = Instant::now();
 
-        let (mut status, mut text) = self.post(&self.body(&req, true)).await?;
+        let think_off = !self
+            .refused_thinking
+            .lock()
+            .expect("lock is never poisoned")
+            .contains(&req.model);
 
-        if (400..500).contains(&status) && rejects_thinking(&text) {
+        let (mut status, mut text) = self.post(&self.body(&req, think_off)).await?;
+
+        if think_off && (400..500).contains(&status) && rejects_thinking(&text) {
             tracing::debug!(
                 model = %req.model,
                 host = self.flavour.name(),
-                "host rejects the thinking switch; retrying without it"
+                "host rejects the thinking switch; retrying without it, and from now on"
             );
+            self.refused_thinking
+                .lock()
+                .expect("lock is never poisoned")
+                .insert(req.model.clone());
             (status, text) = self.post(&self.body(&req, false)).await?;
         }
 
@@ -481,9 +497,9 @@ mod tests {
     }
 
     /// A model without a reasoning mode refuses the switch; the same question goes out again
-    /// without it and is answered.
+    /// without it and is answered, and later questions to that model skip the refusal.
     #[tokio::test]
-    async fn a_rejected_thinking_switch_is_retried_without_it() {
+    async fn a_rejected_thinking_switch_is_retried_without_it_and_remembered() {
         let mut server = mockito::Server::new_async().await;
         let refused = server
             .mock("POST", "/v1/chat/completions")
@@ -497,7 +513,16 @@ mod tests {
             .await;
         let answered = server
             .mock("POST", "/v1/chat/completions")
+            // Only a body without the switch is answered. Without this guard mockito would hand a
+            // repeated switch to this mock once the refusal had been used up, and the test
+            // would pass whether or not the refusal was remembered.
+            .match_request(|request| {
+                !request
+                    .utf8_lossy_body()
+                    .is_ok_and(|body| body.contains(r#""reasoning_effort""#))
+            })
             .with_body(REAL_RESPONSE)
+            .expect(2)
             .create_async()
             .await;
         let host = OpenAiCompatHost::new(
@@ -509,8 +534,11 @@ mod tests {
         .unwrap();
 
         let dist = host.first_token(request(4)).await.unwrap();
-
         assert_eq!(dist.tokens[0].0, "B");
+
+        // The second question to the same model must not pay for the refusal again.
+        host.first_token(request(4)).await.unwrap();
+
         refused.assert_async().await;
         answered.assert_async().await;
     }

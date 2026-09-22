@@ -33,7 +33,10 @@ Calibration happens later, in `cerno-core`, where it is explicit and reversible.
 
 `think: false` is on every request because without it the first generated token is a chat
 template control token (`<|channel|>` on gemma4), not the answer label.
-`rejects_thinking` retries without the field for models that have no thinking mode at all.
+`rejects_thinking` retries without the field for models that have no thinking mode at all, and
+the host remembers that per model, so the refusal costs one round trip per model rather than one
+per question. The mock tests guard the answering mock so a repeated refusal cannot fall through
+to it — without that guard they passed with the cache removed.
 
 ## The other hosts get the same treatment, per runtime
 
