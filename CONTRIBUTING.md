@@ -38,7 +38,8 @@ loads the model, 5–10 s cold against ~40 ms warm.
 short version:
 
 - **The sampling options in `cerno-host` are correctness conditions.** `top_k: 0, top_p: 1,
-  min_p: 0` keep Ollama from truncating the distribution before it reports it. Loosening them
+  min_p: 0` keep Ollama from truncating the distribution before it reports it; the other hosts
+  have their own set in `openai.rs`. Loosening them
   produces answers that still look plausible with probabilities that mean nothing. They are
   not configurable, on purpose.
 - **Labels stay single capital letters.** Words split into several tokens and compete with
@@ -99,7 +100,6 @@ stdin, which looks exactly like an application bug. Details in [CLAUDE.md](CLAUD
 Some things were left out deliberately rather than forgotten. Open an issue before building
 any of these, so we can agree on the shape:
 
-- a llama.cpp `ModelHost` (the seam exists; `max_top_logprobs` has to be reported honestly)
 - choices beyond 20 options — today a 422, because Ollama cannot report a 21st label
 - fitting calibration from labelled data
 - shuffling options against position bias

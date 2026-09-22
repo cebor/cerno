@@ -10,13 +10,15 @@
 //!
 //! Usage:
 //!   cerno-bench --models a,b,c [--reference m] [--dataset p] [--out p] [--host url]
+//!               [--host-kind ollama|openai|vllm|llamacpp|lmstudio]
+//!
+//! An API key for the OpenAI-compatible hosts comes from `CERNO_HOST_API_KEY`.
 
 use cerno_core::{Engine, labels};
-use cerno_host::{ModelHost, OllamaHost};
+use cerno_host::HostKind;
 use cerno_types::{Answer, Calibration, ChoiceSpec, Question, QuestionKind, ScoreSpec};
 use serde::Deserialize;
 use std::collections::BTreeMap;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Deserialize)]
@@ -301,12 +303,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dataset_path =
         arg(&args, "--dataset").unwrap_or_else(|| "crates/cerno-bench/dataset.json".into());
     let out_path = arg(&args, "--out").unwrap_or_else(|| "docs/model-selection.md".into());
-    let host_url = arg(&args, "--host").unwrap_or_else(|| "http://localhost:11434".into());
+    let host_kind: HostKind = arg(&args, "--host-kind")
+        .unwrap_or_else(|| "ollama".into())
+        .parse()?;
+    let host_url = arg(&args, "--host").unwrap_or_else(|| host_kind.default_url().into());
 
     let dataset: Dataset = serde_json::from_str(&std::fs::read_to_string(&dataset_path)?)?;
     println!("{} cases from {dataset_path}", dataset.cases.len());
 
-    let host: Arc<dyn ModelHost> = Arc::new(OllamaHost::new(&host_url, Duration::from_secs(120))?);
+    let host = cerno_host::connect(
+        host_kind,
+        &host_url,
+        std::env::var("CERNO_HOST_API_KEY").ok(),
+        Duration::from_secs(120),
+    )?;
     // Keep each model resident for the length of its run; unloading between cases would measure
     // model loading, not inference.
     let engine = Engine::new(host, Some("5m".to_string()));

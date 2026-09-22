@@ -4,10 +4,8 @@
 //! panicking through an `expect`, so an operator reads a sentence instead of a backtrace.
 
 use cerno_core::Engine;
-use cerno_host::{ModelHost, OllamaHost};
 use cerno_server::{AppState, Config, build_router};
 use std::process::ExitCode;
-use std::sync::Arc;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -27,20 +25,25 @@ async fn main() -> ExitCode {
         }
     };
 
-    let host = match OllamaHost::new(&config.ollama_url, config.host_timeout) {
+    let host = match cerno_host::connect(
+        config.host,
+        &config.host_url,
+        config.host_api_key.clone(),
+        config.host_timeout,
+    ) {
         Ok(host) => host,
         Err(err) => {
-            tracing::error!("could not build the {} client: {err}", "ollama");
+            tracing::error!("could not build the {} client: {err}", config.host);
             return ExitCode::FAILURE;
         }
     };
 
-    let host: Arc<dyn ModelHost> = Arc::new(host);
     let capabilities = host.capabilities();
     let engine = Engine::new(host, config.keep_alive.clone());
 
     tracing::info!(
-        host = %config.ollama_url,
+        host = %config.host,
+        host_url = %config.host_url,
         default_model = %config.default_model,
         aliases = config.models.len(),
         strict_models = config.strict_models,

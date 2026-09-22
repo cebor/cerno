@@ -1,6 +1,7 @@
 # Agent Instructions — cerno
 
-A local reimplementation of JEV's system-one primitives (noul, choice, score) over Ollama.
+A local reimplementation of JEV's system-one primitives (noul, choice, score) over Ollama
+or any OpenAI-compatible runtime.
 See [README.md](README.md) for the project overview and [docs/model-selection.md](docs/model-selection.md)
 for the measured model comparison.
 
@@ -33,6 +34,29 @@ Calibration happens later, in `cerno-core`, where it is explicit and reversible.
 `think: false` is on every request because without it the first generated token is a chat
 template control token (`<|channel|>` on gemma4), not the answer label.
 `rejects_thinking` retries without the field for models that have no thinking mode at all.
+
+## The other hosts get the same treatment, per runtime
+
+`crates/cerno-host/src/openai.rs` serves vLLM, llama.cpp, LM Studio and plain OpenAI through one
+`/v1/chat/completions` adapter. The response shape is identical everywhere, so a `Flavour` only
+decides which extra fields go out: `top_k`/`min_p` (with `-1` as vLLM's "off", `0` elsewhere),
+`post_sampling_probs: false` for llama.cpp, and `chat_template_kwargs.enable_thinking: false` for
+vLLM and llama.cpp. `Generic` sends none of these, because OpenAI answers 400 to a field it does
+not know. `the_generic_flavour_sends_nothing_nonstandard` pins that.
+
+`reasoning_effort: "none"` is the standard thinking switch and goes out on every flavour.
+Without it, gemma4 behind Ollama's `/v1` put `<|channel>` first at `-0.03`, with the answer at
+`-3.5`; `think` and `chat_template_kwargs` were ignored on that endpoint. The OpenAI adapter has
+its own `rejects_thinking`, because a model without a reasoning mode refuses the field.
+
+Measured against Ollama's `/v1` on `gemma4:26b-a4b-it-q4_K_M`: the `Generic` body returns the
+exact same distribution as the native path with `REQUIRED` options, and `top_k: 40` sent there
+changed nothing. vLLM, llama.cpp and LM Studio have not been run live yet; whether LM Studio
+reports `top_logprobs` at all, and whether llama.cpp honours `post_sampling_probs` on the chat
+endpoint, are the two open questions. A host without logprobs fails loudly as `NoLogprobs`.
+
+One host per process, chosen by `CERNO_HOST` through `cerno_host::connect`. A second runtime
+is a second instance, not a routing table.
 
 ## Labels are single capital letters, and that is not cosmetic
 
@@ -175,8 +199,7 @@ instead — `pty.openpty`, `TIOCSWINSZ` for a real size, write keys on a schedul
 ANSI stream into a grid to read the final screen. Without the window size the program draws
 nothing at all and the capture is empty.
 
-## Not built yet
+## Host ceilings
 
-A llama.cpp host is the remaining open seam: implement `ModelHost` and report a real
-`max_top_logprobs`; llama.cpp's own ceiling is higher than Ollama's, which is why `Engine`
-takes the minimum of that and `MAX_OPTIONS` rather than hard-coding 20.
+Every adapter reports `max_top_logprobs: 20` today. llama.cpp's own ceiling is higher, which is
+why `Engine` takes the minimum of that and `MAX_OPTIONS` rather than hard-coding 20.

@@ -8,7 +8,9 @@ Typed decisions from a locally hosted model. Three primitives:
 | **choice** | which one of up to 20 options | the option, plus a probability for each |
 | **score** | where on a rubric of 2–10 levels | the level, its legend, and a weighted mean |
 
-Everything runs against Ollama on your own machine. Nothing leaves it.
+Everything runs against a model on your own machine — Ollama by default, or vLLM, llama.cpp,
+LM Studio or anything else that speaks OpenAI's API. Nothing leaves it unless you point it at
+a remote endpoint.
 
 *cernere*, Latin: to sift, to distinguish, to decide.
 
@@ -178,7 +180,9 @@ Deployment knobs are environment variables; the model table is an optional TOML 
 | Variable | Default | |
 |---|---|---|
 | `CERNO_BIND` | `0.0.0.0:3000` | |
-| `CERNO_OLLAMA_URL` | `http://localhost:11434` | |
+| `CERNO_HOST` | `ollama` | `ollama`, `vllm`, `llamacpp`, `lmstudio` or `openai` |
+| `CERNO_HOST_URL` | depends on `CERNO_HOST` | See [Hosts](#hosts) |
+| `CERNO_HOST_API_KEY` | — | Bearer token for the OpenAI-compatible hosts |
 | `CERNO_DEFAULT_MODEL` | `gemma4:e2b-it-qat` | Alias or model name |
 | `CERNO_CONFIG` | — | Path to the model table |
 | `CERNO_STRICT_MODELS` | `false` | Only allow configured models |
@@ -187,12 +191,32 @@ Deployment knobs are environment variables; the model table is an optional TOML 
 | `CERNO_HOST_TIMEOUT_SECS` | `30` | |
 | `RUST_LOG` | `cerno_server=info,cerno_core=info` | |
 
+## Hosts
+
+| `CERNO_HOST` | Default URL | |
+|---|---|---|
+| `ollama` | `http://localhost:11434` | Native API; `CERNO_KEEP_ALIVE` applies |
+| `vllm` | `http://localhost:8000/v1` | Also sends `top_k: -1`, `min_p: 0`, `chat_template_kwargs` |
+| `llamacpp` | `http://localhost:8080/v1` | `llama-server`; also sends `top_k: 0`, `min_p: 0`, `post_sampling_probs: false` |
+| `lmstudio` | `http://localhost:1234/v1` | Also sends `top_k: 0`, `min_p: 0` |
+| `openai` | `https://api.openai.com/v1` | Standard fields only, for any other compatible server |
+
+Every host must report `top_logprobs`; one that does not answers with a 502 that says so. The
+extra fields are there because a runtime that samples before it reports logprobs hands back a
+truncated distribution otherwise. `openai` cannot send them, so it is only as good as the
+server's own defaults.
+
+```bash
+CERNO_HOST=vllm cargo run --release -p cerno-server
+CERNO_HOST=openai CERNO_HOST_URL=http://gpu-box:9000/v1 CERNO_HOST_API_KEY=… cargo run -p cerno-server
+```
+
 ## Layout
 
 ```
 crates/
   cerno-types    wire types — serde always, utoipa behind a feature
-  cerno-host     ModelHost trait + the Ollama adapter
+  cerno-host     ModelHost trait, the Ollama and OpenAI-compatible adapters
   cerno-core     labels, prompt, logprob maths, engine
   cerno-server   axum + utoipa
   cerno-sdk      Rust client
@@ -203,13 +227,13 @@ sdks/typescript  npm package `@cerno/sdk`
 spec/            openapi.json + conformance cases
 ```
 
-`ModelHost` is the seam for a second runtime. It knows nothing about noul, choice or score — it
-answers one question, "what is the distribution over the next token?" — so a llama.cpp adapter
-would be a new file, not a new design.
+`ModelHost` is the seam between cerno and a runtime. It knows nothing about noul, choice or
+score — it answers one question, "what is the distribution over the next token?" — so every
+host gets the same primitives for free.
 
 ## Limits
 
-- **20 options.** Ollama reports at most 20 ranked tokens, so a 21st option could never be
+- **20 options.** Ollama and OpenAI report at most 20 ranked tokens, so a 21st option could never be
   observed. Over that, the service answers 422 rather than degrading quietly. Splitting a large
   set across two questions works today; doing it automatically does not.
 - **Position bias.** Options are always lettered in request order, and models have some

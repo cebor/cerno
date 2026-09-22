@@ -1,15 +1,14 @@
-//! End-to-end tests through the real router, with mockito standing in for Ollama.
+//! End-to-end tests through the real router, with mockito standing in for the model host.
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use cerno_core::Engine;
-use cerno_host::{ModelHost, OllamaHost};
+use cerno_host::HostKind;
 use cerno_server::config::{CalibrationEntry, Config, ModelEntry};
 use cerno_server::{AppState, build_router};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
-use std::sync::Arc;
 use std::time::Duration;
 use tower::ServiceExt;
 
@@ -38,7 +37,9 @@ fn chat_reply() -> String {
 fn config(url: &str, strict: bool) -> Config {
     Config {
         bind: "127.0.0.1:0".parse().unwrap(),
-        ollama_url: url.to_string(),
+        host: HostKind::Ollama,
+        host_url: url.to_string(),
+        host_api_key: None,
         default_model: "small".into(),
         models: BTreeMap::from([(
             "small".to_string(),
@@ -55,8 +56,13 @@ fn config(url: &str, strict: bool) -> Config {
 }
 
 fn app(config: Config) -> axum::Router {
-    let host: Arc<dyn ModelHost> =
-        Arc::new(OllamaHost::new(&config.ollama_url, config.host_timeout).unwrap());
+    let host = cerno_host::connect(
+        config.host,
+        &config.host_url,
+        config.host_api_key.clone(),
+        config.host_timeout,
+    )
+    .unwrap();
     let engine = Engine::new(host, config.keep_alive.clone());
     build_router(AppState::new(engine, config))
 }
@@ -301,6 +307,63 @@ async fn a_model_that_ignores_the_instruction_is_a_bad_gateway() {
     assert_eq!(body["question_id"], "q");
     // The message has to name what actually came back, or it is not actionable.
     assert!(body["message"].as_str().unwrap().contains("Sure"), "{body}");
+}
+
+/// The same request through an OpenAI-compatible host: the answer comes out identically, and the
+/// body carries what makes the distribution readable on that runtime.
+#[tokio::test]
+async fn an_openai_compatible_host_answers_the_same_request() {
+    let mut server = mockito::Server::new_async().await;
+    let mock = server
+        .mock("POST", "/v1/chat/completions")
+        .match_header("authorization", "Bearer sk-test")
+        .match_body(mockito::Matcher::PartialJson(json!({
+            "model": "gemma4:e2b-it-qat",
+            "logprobs": true,
+            "max_tokens": 1,
+            "top_k": -1,
+            "chat_template_kwargs": {"enable_thinking": false},
+        })))
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "choices": [{
+                    "message": {"role": "assistant", "content": "B"},
+                    "logprobs": {"content": [{
+                        "token": "B",
+                        "logprob": -0.1,
+                        "top_logprobs": [
+                            {"token": "B", "logprob": -0.1},
+                            {"token": "A", "logprob": -2.4},
+                            {"token": "C", "logprob": -6.0},
+                            {"token": "D", "logprob": -9.0}
+                        ]
+                    }]}
+                }],
+                "usage": {"prompt_tokens": 57, "completion_tokens": 1}
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let mut config = config(&format!("{}/v1", server.url()), false);
+    config.host = HostKind::Vllm;
+    config.host_api_key = Some("sk-test".into());
+
+    let (status, body) = post(
+        app(config),
+        "/v1/systemone",
+        json!({
+            "state": "Printer is jammed.",
+            "questions": [{"id": "team", "choice": {"question": "Which team?", "options": ["IT", "Facility", "HR"]}}]
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    mock.assert_async().await;
+    assert_eq!(body["answers"]["team"]["choice"], "Facility", "{body}");
 }
 
 /// A refused connection and a host that never answers are different faults, and a caller that

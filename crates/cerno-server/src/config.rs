@@ -4,6 +4,7 @@
 //! table, because aliases and per-model calibration are structured data that does not fit an
 //! environment variable well. Env wins over file for the values both can set.
 
+use cerno_host::HostKind;
 use cerno_types::Calibration;
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -11,7 +12,6 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 const DEFAULT_BIND: &str = "0.0.0.0:3000";
-const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 const DEFAULT_MODEL: &str = "gemma4:e2b-it-qat";
 const DEFAULT_KEEP_ALIVE: &str = "5m";
 const DEFAULT_CONCURRENCY: usize = 4;
@@ -86,7 +86,12 @@ struct FileConfig {
 #[derive(Debug, Clone)]
 pub struct Config {
     pub bind: SocketAddr,
-    pub ollama_url: String,
+    /// Which runtime answers. One per process; a second runtime is a second instance.
+    pub host: HostKind,
+    /// Defaults to where `host` listens out of the box.
+    pub host_url: String,
+    /// Sent as a bearer token to the OpenAI-compatible hosts. Never logged.
+    pub host_api_key: Option<String>,
     /// The alias or model name used when a request names none.
     pub default_model: String,
     /// Alias to model, with the calibration that alias implies.
@@ -144,15 +149,21 @@ impl Config {
             Err(_) => file.strict_models.unwrap_or(false),
         };
 
+        let host: HostKind = var("CERNO_HOST", HostKind::Ollama)?;
+
         let config = Self {
             bind: var(
                 "CERNO_BIND",
                 DEFAULT_BIND.parse().expect("valid default bind"),
             )?,
-            ollama_url: std::env::var("CERNO_OLLAMA_URL")
-                .unwrap_or_else(|_| DEFAULT_OLLAMA_URL.to_string())
+            host,
+            host_url: std::env::var("CERNO_HOST_URL")
+                .unwrap_or_else(|_| host.default_url().to_string())
                 .trim_end_matches('/')
                 .to_string(),
+            host_api_key: std::env::var("CERNO_HOST_API_KEY")
+                .ok()
+                .filter(|key| !key.trim().is_empty()),
             default_model,
             models: file.models,
             strict_models,
@@ -219,7 +230,9 @@ mod tests {
     fn config(strict: bool) -> Config {
         Config {
             bind: DEFAULT_BIND.parse().unwrap(),
-            ollama_url: DEFAULT_OLLAMA_URL.into(),
+            host: HostKind::Ollama,
+            host_url: HostKind::Ollama.default_url().into(),
+            host_api_key: None,
             default_model: "small".into(),
             models: BTreeMap::from([("small".to_string(), entry("gemma4:e2b-it-qat", 2.5))]),
             strict_models: strict,
