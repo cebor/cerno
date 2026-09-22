@@ -1,0 +1,180 @@
+# cerno
+
+Typed decisions from a locally hosted model. Three primitives:
+
+| | | |
+|---|---|---|
+| **noul** | how likely the answer is yes | `0.0 .. 1.0` |
+| **choice** | which one of up to 20 options | the option, plus a probability for each |
+| **score** | where on a rubric of 2–10 levels | the level, its legend, and a weighted mean |
+
+Everything runs against Ollama on your own machine. Nothing leaves it.
+
+*cernere*, Latin: to sift, to distinguish, to decide.
+
+```bash
+curl localhost:3000/v1/systemone -H 'content-type: application/json' -d '{
+  "state": "Ticket: Serverraum-Klima ausgefallen, 31 Grad und steigend.",
+  "questions": [
+    {"id": "urgent", "noul": "Ist das dringend?"},
+    {"id": "team", "choice": {"question": "Welches Team?", "options": ["IT", "Facility", "HR"]}},
+    {"id": "sev",  "score":  {"question": "Wie schwer?", "levels": 5}}
+  ]}'
+```
+
+```json
+{"answers": {
+   "urgent": {"type": "noul",   "noul": 0.9911, "confidence": 0.927, "truncated": false},
+   "team":   {"type": "choice", "choice": "Facility", "index": 1, "confidence": 0.939},
+   "sev":    {"type": "score",  "score": 5, "expected_score": 4.88, "legend": "5"}},
+ "model": "gemma4:e2b-it-qat",
+ "usage": {"input_tokens": 329, "questions": 3},
+ "timing_ms": {"total": 144}}
+```
+
+Three questions, 144 ms, on a 4 GB model.
+
+## How it works
+
+A generative model answers by writing words, and then something has to parse the words back
+into a decision. cerno never lets it get that far.
+
+Each question becomes a short prompt whose options are lettered `A`, `B`, `C`. The model is
+asked for exactly **one** token, and instead of taking the token cerno reads the *probability
+distribution* over it. `P(A)`, `P(B)`, `P(C)` are all there, in one forward pass, whatever the
+number of options.
+
+```
+question ──> options ──> labels A,B,C ──> prompt ──> model ──> distribution over one token
+                                                                          │
+                       typed answer <── calibrate <── fold variants, floor ┘
+```
+
+That is where the speed comes from — one token, not a sentence — and where the probabilities
+come from, since they are the model's own, not a number it was asked to invent.
+
+### What the measurements forced
+
+The design is shaped by six things that turned out to be true of real models, each of which
+would otherwise have produced quietly wrong answers:
+
+| Measured | Consequence |
+|---|---|
+| The first generated token was `<\|channel\|>`, a chat-template control token | `think: false` on every request |
+| The default `top_k: 40` truncates the distribution *before* logprobs are reported, and renormalises what survives | `top_k: 0, top_p: 1, min_p: 0` are pinned in `cerno-host` and not configurable |
+| "Nein" is not one token — it arrives as `Ne` + `in` — and "Ja" competes with `JA`, ` Ja`, `ja` | Single-letter labels only; variants of one label are folded in probability space |
+| When a model is certain, the losing label drops out of the top-20 window entirely | The weakest reported logprob becomes an upper bound, and the answer is flagged `truncated` |
+| `gemma4:26b` answers clear cases at `P = 1.0000` | Temperature scaling, per request or per model |
+| A 26B model answers in 87 ms; a 4 GB one in 36 ms | A small model is the default |
+
+## Getting started
+
+```bash
+ollama pull gemma4:e2b-it-qat
+cargo run -p cerno-server
+```
+
+Then `http://localhost:3000/docs` for Swagger UI, or one of the SDKs:
+
+```rust
+let answers = client.systemone(text)
+    .noul("urgent", "Is this urgent?")
+    .choice("team", "Which team?", ["IT", "Facility"])
+    .send().await?;
+```
+```python
+answers = (client.systemone(text)
+    .noul("urgent", "Is this urgent?")
+    .choice("team", "Which team?", ["IT", "Facility"])
+    .send())
+```
+```ts
+const answers = await client.systemone(text)
+  .noul("urgent", "Is this urgent?")
+  .choice("team", "Which team?", ["IT", "Facility"])
+  .send();
+```
+
+All three are written by hand against `spec/openapi.json` and tested against the same
+[conformance cases](spec/conformance/cases.json), so they cannot drift apart silently.
+
+## Choosing a model
+
+`cargo run -p cerno-bench` scores candidates over a labelled dataset and writes
+[docs/model-selection.md](docs/model-selection.md). The current result:
+
+| Model | Fidelity | Accuracy | p50 | Brier | Best T |
+|---|---|---|---|---|---|
+| `gemma4:26b-a4b-it-q4_K_M` *(reference)* | 100% | 97% | 87 ms | 0.029 | 3.20 |
+| **`gemma4:e2b-it-qat`** | 100% | **97%** | **36 ms** | **0.006** | 0.80 |
+| `granite4:3b` | 100% | 81% | 26 ms | 0.168 | 2.10 |
+| `phi4-mini:3.8b` | 100% | 86% | 26 ms | 0.023 | 2.25 |
+
+The 4 GB model matches a 26B model's accuracy at 2.4× the speed, and is *better* calibrated:
+the large model needs its logits flattened by 3.2 before its confidences mean anything, while
+the small one is very slightly under-confident.
+
+**Fidelity is a gate, not a score.** A model that answers in prose instead of a letter is
+unusable here at any accuracy, which is why the benchmark reports it first.
+
+## Configuration
+
+Deployment knobs are environment variables; the model table is an optional TOML file
+(see [cerno.example.toml](cerno.example.toml)).
+
+| Variable | Default | |
+|---|---|---|
+| `CERNO_BIND` | `0.0.0.0:3000` | |
+| `CERNO_OLLAMA_URL` | `http://localhost:11434` | |
+| `CERNO_DEFAULT_MODEL` | `gemma4:e2b-it-qat` | Alias or model name |
+| `CERNO_CONFIG` | — | Path to the model table |
+| `CERNO_STRICT_MODELS` | `false` | Only allow configured models |
+| `CERNO_MAX_CONCURRENT_QUESTIONS` | `4` | In flight against the host at once |
+| `CERNO_KEEP_ALIVE` | `5m` | Empty means: do not send it |
+| `CERNO_HOST_TIMEOUT_SECS` | `30` | |
+| `RUST_LOG` | `cerno_server=info,cerno_core=info` | |
+
+## Layout
+
+```
+crates/
+  cerno-types    wire types — serde always, utoipa behind a feature
+  cerno-host     ModelHost trait + the Ollama adapter
+  cerno-core     labels, prompt, logprob maths, engine
+  cerno-server   axum + utoipa
+  cerno-sdk      Rust client
+  cerno-bench    model benchmark
+sdks/python      uv package `cerno`
+sdks/typescript  npm package `@cerno/sdk`
+spec/            openapi.json + conformance cases
+```
+
+`ModelHost` is the seam for a second runtime. It knows nothing about noul, choice or score — it
+answers one question, "what is the distribution over the next token?" — so a llama.cpp adapter
+would be a new file, not a new design.
+
+## Limits
+
+- **20 options.** Ollama reports at most 20 ranked tokens, so a 21st option could never be
+  observed. Over that, the service answers 422 rather than degrading quietly. Splitting a large
+  set across two questions works today; doing it automatically does not.
+- **Position bias.** Options are always lettered in request order, and models have some
+  preference for `A`. Shuffling and averaging would cost a second pass, so it is not done.
+- **Logprobs wobble.** Identical requests can return logprobs differing in the third decimal —
+  GPU reduction order, not calibration. It does not change answers; it does mean exact equality
+  is the wrong assertion in a test against a live model.
+- **The TUI is not built yet.** It is next, on `cerno-sdk`.
+
+## Development
+
+```bash
+cargo test --workspace
+cd sdks/python && uv run pytest
+cd sdks/typescript && npm test
+```
+
+`spec/openapi.json` is generated, and a test fails when it drifts from the code:
+
+```bash
+cargo run -p cerno-server --bin cerno-openapi > spec/openapi.json
+```
