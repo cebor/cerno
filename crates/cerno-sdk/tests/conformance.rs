@@ -242,3 +242,19 @@ async fn reading_an_answer_as_the_wrong_type_names_both_types() {
         Error::MissingAnswer(_)
     ));
 }
+
+/// `into_inner` and `From` are the two directions of the same door; a response should survive
+/// going through both.
+#[tokio::test]
+async fn a_response_can_be_wrapped_without_going_over_the_network() {
+    let cases = cases();
+    let body = cases["responses"][0]["body"].clone();
+    let response: cerno_sdk::SystemOneResponse = serde_json::from_value(body).unwrap();
+
+    let answers = cerno_sdk::Answers::from(response);
+
+    assert_eq!(answers.model(), "gemma4:e2b-it-qat");
+    assert_eq!(answers.choice("team").unwrap(), "Facility");
+    assert_eq!(answers.score("sev").unwrap(), 5);
+    assert_eq!(answers.into_inner().usage.questions, 3);
+}

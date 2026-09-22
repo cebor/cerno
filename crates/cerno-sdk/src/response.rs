@@ -20,6 +20,15 @@ fn name_of(answer: &Answer) -> &'static str {
     }
 }
 
+/// Wrap a response that was obtained some other way — read from a file, replayed from a log, or
+/// parsed by a caller doing its own transport. The accessors are the useful part of this type,
+/// and they should not be reachable only by going over the network.
+impl From<SystemOneResponse> for Answers {
+    fn from(response: SystemOneResponse) -> Self {
+        Self { response }
+    }
+}
+
 impl Answers {
     pub(crate) fn new(response: SystemOneResponse) -> Self {
         Self { response }
