@@ -1,0 +1,42 @@
+# Only the suites that need no Ollama host: every host is mocked, so these run anywhere.
+# The live checks (`cargo run -p cerno-sdk --example smoke`, `cargo run -p cerno-bench`)
+# need a model and stay out of CI.
+
+stages: [test]
+
+rust:
+  stage: test
+  image: rust:latest # stable, edition 2024
+  variables:
+    CARGO_HOME: $CI_PROJECT_DIR/.cargo
+  cache:
+    key:
+      files: [Cargo.lock]
+    paths: [.cargo/registry, .cargo/git, target]
+  script:
+    - cargo test --workspace --locked
+
+python:
+  stage: test
+  image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+  variables:
+    UV_CACHE_DIR: $CI_PROJECT_DIR/.uv-cache
+  cache:
+    key:
+      files: [sdks/python/uv.lock]
+    paths: [.uv-cache]
+  script:
+    - cd sdks/python
+    - uv run --locked --extra dev pytest
+
+typescript:
+  stage: test
+  image: node:24 # the tests run .ts directly, which needs 22.18+
+  cache:
+    key:
+      files: [sdks/typescript/package-lock.json]
+    paths: [.npm]
+  script:
+    - cd sdks/typescript
+    - npm ci --cache $CI_PROJECT_DIR/.npm --prefer-offline
+    - npm test
