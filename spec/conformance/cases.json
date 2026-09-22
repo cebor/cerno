@@ -1,0 +1,157 @@
+{
+  "note": "The shared truth for every cerno SDK. `requests` pin the JSON a client must produce from a given builder call; `responses` pin the values a client must read back out; `errors` pin the failure mapping. Each SDK runs all three against a mock server. The Rust test suite additionally checks every body here against the server's own types, so a case can never describe something the service would reject.",
+  "version": 1,
+
+  "requests": [
+    {
+      "name": "minimal noul",
+      "state": "Ticket: printer jammed.",
+      "questions": [{"id": "urgent", "kind": "noul", "question": "Is this urgent?"}],
+      "expect_body": {
+        "state": "Ticket: printer jammed.",
+        "questions": [{"id": "urgent", "noul": "Is this urgent?"}]
+      }
+    },
+    {
+      "name": "all three primitives with model and calibration",
+      "state": "Ticket: server room at 31C.",
+      "model": "small",
+      "calibration": 2.5,
+      "questions": [
+        {"id": "urgent", "kind": "noul", "question": "Is this urgent?"},
+        {"id": "team", "kind": "choice", "question": "Which team?", "options": ["IT", "Facility", "HR"]},
+        {"id": "sev", "kind": "score", "question": "How severe?", "levels": 5}
+      ],
+      "expect_body": {
+        "state": "Ticket: server room at 31C.",
+        "model": "small",
+        "calibration": {"temperature": 2.5},
+        "questions": [
+          {"id": "urgent", "noul": "Is this urgent?"},
+          {"id": "team", "choice": {"question": "Which team?", "options": ["IT", "Facility", "HR"]}},
+          {"id": "sev", "score": {"question": "How severe?", "levels": 5}}
+        ]
+      }
+    },
+    {
+      "name": "score with named levels and a choice without a question",
+      "state": "Review: broke after two days.",
+      "questions": [
+        {"id": "stars", "kind": "score", "question": "How many stars?", "levels": ["awful", "poor", "ok", "good", "great"]},
+        {"id": "mood", "kind": "choice", "options": ["positive", "neutral", "negative"]}
+      ],
+      "expect_body": {
+        "state": "Review: broke after two days.",
+        "questions": [
+          {"id": "stars", "score": {"question": "How many stars?", "levels": ["awful", "poor", "ok", "good", "great"]}},
+          {"id": "mood", "choice": {"options": ["positive", "neutral", "negative"]}}
+        ]
+      }
+    }
+  ],
+
+  "responses": [
+    {
+      "name": "all three answers",
+      "body": {
+        "answers": {
+          "urgent": {
+            "type": "noul",
+            "noul": 0.9911299643691728,
+            "confidence": 0.9267945133933535,
+            "raw_logprobs": {"A": -0.010017034211529765, "B": -4.726183891296387},
+            "truncated": false
+          },
+          "team": {
+            "type": "choice",
+            "choice": "Facility",
+            "index": 1,
+            "confidence": 0.9393098931836321,
+            "probabilities": [
+              {"option": "IT", "probability": 0.010659372640821195},
+              {"option": "Facility", "probability": 0.9858602934549777},
+              {"option": "HR", "probability": 0.0034803339042010855}
+            ],
+            "raw_logprobs": {"A": -4.542220592498779, "B": -0.015145503443622971, "C": -5.959764003753662},
+            "truncated": false
+          },
+          "sev": {
+            "type": "score",
+            "score": 5,
+            "expected_score": 4.8810983058235555,
+            "legend": "kritisch",
+            "confidence": 0.7814675735406224,
+            "probabilities": [
+              {"level": 1, "legend": "unkritisch", "probability": 0.005235614187167333},
+              {"level": 2, "legend": "gering", "probability": 0.004826752534677755},
+              {"level": 3, "legend": "mittel", "probability": 0.012496430433981883},
+              {"level": 4, "legend": "hoch", "probability": 0.058486118955777766},
+              {"level": 5, "legend": "kritisch", "probability": 0.9189550838883952}
+            ],
+            "raw_logprobs": {"A": -5.253698825836182, "B": -5.3350090980529785, "C": -4.383739948272705, "D": -2.840393543243408, "E": -0.0859457403421402},
+            "truncated": false
+          }
+        },
+        "model": "gemma4:e2b-it-qat",
+        "usage": {"input_tokens": 329, "questions": 3},
+        "timing_ms": {"total": 144}
+      },
+      "expect": {
+        "model": "gemma4:e2b-it-qat",
+        "usage": {"input_tokens": 329, "questions": 3},
+        "answers": {
+          "urgent": {"type": "noul", "noul": 0.9911299643691728, "truncated": false},
+          "team": {"type": "choice", "choice": "Facility", "index": 1, "truncated": false},
+          "sev": {"type": "score", "score": 5, "legend": "kritisch", "truncated": false}
+        }
+      }
+    },
+    {
+      "name": "truncated answer",
+      "body": {
+        "answers": {
+          "q": {
+            "type": "noul",
+            "noul": 0.0000001,
+            "confidence": 0.999,
+            "raw_logprobs": {"A": -15.5, "B": -0.001},
+            "truncated": true
+          }
+        },
+        "model": "gemma4:e2b-it-qat",
+        "usage": {"input_tokens": 57, "questions": 1},
+        "timing_ms": {"total": 38}
+      },
+      "expect": {
+        "model": "gemma4:e2b-it-qat",
+        "answers": {"q": {"type": "noul", "truncated": true}}
+      }
+    }
+  ],
+
+  "errors": [
+    {
+      "name": "too many options",
+      "status": 422,
+      "body": {
+        "code": "too_many_options",
+        "message": "a choice may have at most 20 options, got 21",
+        "question_id": "q"
+      }
+    },
+    {
+      "name": "model ignored the instruction",
+      "status": 502,
+      "body": {
+        "code": "no_label_matched",
+        "message": "model answered question \"q\" with none of the labels [\"A\", \"B\"]",
+        "question_id": "q"
+      }
+    },
+    {
+      "name": "host timed out",
+      "status": 504,
+      "body": {"code": "host_timeout", "message": "host timed out after 30s"}
+    }
+  ]
+}

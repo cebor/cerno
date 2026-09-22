@@ -1,0 +1,23 @@
+# Model table for cerno. Point CERNO_CONFIG at a copy of this file.
+#
+# Only the model table needs a file; every other knob is an environment variable. Aliases exist
+# so a caller can ask for "small" without knowing which model that is today, and so calibration
+# can be pinned per model rather than repeated in every request.
+
+default_model = "small"
+
+# When true, a request may only name a configured alias or one of their target models.
+# Off by default, so a fresh install can point at any model Ollama has pulled.
+strict_models = false
+
+[models.small]
+model = "gemma4:e2b-it-qat"
+# 1.0 is the identity. Above 1 flattens an overconfident model, below 1 sharpens one.
+# See docs/model-selection.md for the measured fit per model.
+calibration = { temperature = 1.0 }
+
+[models.large]
+model = "gemma4:26b-a4b-it-q4_K_M"
+# Measured at 3.20 over the benchmark set: this model answers clear cases at a probability of
+# 1.0000 and needs real flattening before its confidences mean anything.
+calibration = { temperature = 3.2 }

@@ -1,0 +1,616 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "cerno",
+    "description": "Noul, Choice and Score against a locally hosted model. Each question is one forward pass: the answer is read from the probability distribution over the first generated token.",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1/models": {
+      "get": {
+        "tags": [
+          "cerno"
+        ],
+        "summary": "The models this server will answer for.",
+        "operationId": "models",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/systemone": {
+      "post": {
+        "tags": [
+          "cerno"
+        ],
+        "summary": "Ask several questions about one state.",
+        "description": "Every question is one forward pass, and they are independent, so they run concurrently up to\nthe configured limit rather than one after another.",
+        "operationId": "systemone",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemOneRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemOneResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "the request cannot be answered as written",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "the model or its runtime failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "the host timed out",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Answer": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "noul",
+              "confidence",
+              "raw_logprobs",
+              "truncated",
+              "type"
+            ],
+            "properties": {
+              "confidence": {
+                "type": "number",
+                "format": "double"
+              },
+              "noul": {
+                "type": "number",
+                "format": "double",
+                "description": "Probability that the answer is yes, in `0.0..=1.0`."
+              },
+              "raw_logprobs": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "number",
+                  "format": "double"
+                },
+                "propertyNames": {
+                  "type": "string"
+                }
+              },
+              "truncated": {
+                "type": "boolean"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "noul"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "choice",
+              "index",
+              "confidence",
+              "probabilities",
+              "raw_logprobs",
+              "truncated",
+              "type"
+            ],
+            "properties": {
+              "choice": {
+                "type": "string",
+                "description": "The winning option, verbatim as it was supplied."
+              },
+              "confidence": {
+                "type": "number",
+                "format": "double"
+              },
+              "index": {
+                "type": "integer",
+                "description": "Its position in the request's `options`.",
+                "minimum": 0
+              },
+              "probabilities": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/OptionProbability"
+                },
+                "description": "Every option with its probability, in request order."
+              },
+              "raw_logprobs": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "number",
+                  "format": "double"
+                },
+                "propertyNames": {
+                  "type": "string"
+                }
+              },
+              "truncated": {
+                "type": "boolean"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "choice"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "score",
+              "expected_score",
+              "legend",
+              "confidence",
+              "probabilities",
+              "raw_logprobs",
+              "truncated",
+              "type"
+            ],
+            "properties": {
+              "confidence": {
+                "type": "number",
+                "format": "double"
+              },
+              "expected_score": {
+                "type": "number",
+                "format": "double",
+                "description": "The probability-weighted mean level — often more useful than the argmax."
+              },
+              "legend": {
+                "type": "string",
+                "description": "The legend entry for `score`."
+              },
+              "probabilities": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/LevelProbability"
+                }
+              },
+              "raw_logprobs": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "number",
+                  "format": "double"
+                },
+                "propertyNames": {
+                  "type": "string"
+                }
+              },
+              "score": {
+                "type": "integer",
+                "format": "int32",
+                "description": "The most likely level, 1-based.",
+                "minimum": 0
+              },
+              "truncated": {
+                "type": "boolean"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "score"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "A typed answer.\n\nEvery variant carries `raw_logprobs` and `truncated` so a caller can redo the normalisation\nitself — calibration is a convenience here, never a place where information is lost."
+      },
+      "Calibration": {
+        "type": "object",
+        "description": "Temperature scaling applied to label logits before the softmax.\n\n`1.0` leaves the model's raw distribution untouched. Values above 1 flatten it, which is the\nusual correction for instruct-tuned models that answer clear cases at a probability of 1.0.",
+        "required": [
+          "temperature"
+        ],
+        "properties": {
+          "temperature": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "ChoiceSpec": {
+        "type": "object",
+        "required": [
+          "options"
+        ],
+        "properties": {
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "question": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What is being asked. Omit when the options speak for themselves."
+          }
+        }
+      },
+      "ErrorCode": {
+        "type": "string",
+        "description": "Machine-readable failure reasons. Callers branch on these, not on `message`.",
+        "enum": [
+          "too_many_options",
+          "too_few_options",
+          "invalid_levels",
+          "empty_state",
+          "empty_question",
+          "duplicate_question_id",
+          "no_questions",
+          "unknown_model",
+          "invalid_calibration",
+          "no_label_matched",
+          "host_unavailable",
+          "host_timeout"
+        ]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "message": {
+            "type": "string"
+          },
+          "question_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Set when exactly one question is at fault."
+          }
+        }
+      },
+      "LevelProbability": {
+        "type": "object",
+        "required": [
+          "level",
+          "legend",
+          "probability"
+        ],
+        "properties": {
+          "legend": {
+            "type": "string"
+          },
+          "level": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "probability": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "LevelSpec": {
+        "oneOf": [
+          {
+            "type": "integer",
+            "format": "int32",
+            "description": "`\"levels\": 5` — the engine generates the legend (\"1\" through \"5\").",
+            "minimum": 0
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "`\"levels\": [\"gar nicht\", \"wenig\", ...]` — the strings become the legend."
+          }
+        ],
+        "description": "A rubric given either as a plain count or as the text of each level."
+      },
+      "ModelInfo": {
+        "type": "object",
+        "required": [
+          "alias",
+          "model",
+          "calibration"
+        ],
+        "properties": {
+          "alias": {
+            "type": "string",
+            "description": "The name callers pass as `model`."
+          },
+          "calibration": {
+            "$ref": "#/components/schemas/Calibration"
+          },
+          "model": {
+            "type": "string",
+            "description": "The host-level model this resolves to."
+          }
+        }
+      },
+      "ModelsResponse": {
+        "type": "object",
+        "required": [
+          "models",
+          "default"
+        ],
+        "properties": {
+          "default": {
+            "type": "string",
+            "description": "Which entry answers a request that names no model."
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelInfo"
+            }
+          }
+        }
+      },
+      "OptionProbability": {
+        "type": "object",
+        "required": [
+          "option",
+          "probability"
+        ],
+        "properties": {
+          "option": {
+            "type": "string"
+          },
+          "probability": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "Question": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/QuestionKind"
+          },
+          {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "description": "One question, identified so its answer can be found in the response map."
+      },
+      "QuestionKind": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "How likely the answer is yes.",
+            "required": [
+              "noul"
+            ],
+            "properties": {
+              "noul": {
+                "type": "string",
+                "description": "How likely the answer is yes."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "One of up to [`MAX_OPTIONS`] options.",
+            "required": [
+              "choice"
+            ],
+            "properties": {
+              "choice": {
+                "$ref": "#/components/schemas/ChoiceSpec",
+                "description": "One of up to [`MAX_OPTIONS`] options."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "A position on a rubric of [`MIN_LEVELS`]..=[`MAX_LEVELS`] levels.",
+            "required": [
+              "score"
+            ],
+            "properties": {
+              "score": {
+                "$ref": "#/components/schemas/ScoreSpec",
+                "description": "A position on a rubric of [`MIN_LEVELS`]..=[`MAX_LEVELS`] levels."
+              }
+            }
+          }
+        ],
+        "description": "The three primitives. Externally tagged, so the wire form is `{\"id\": .., \"noul\": ..}`."
+      },
+      "ScoreSpec": {
+        "type": "object",
+        "required": [
+          "levels"
+        ],
+        "properties": {
+          "levels": {
+            "$ref": "#/components/schemas/LevelSpec"
+          },
+          "question": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "SystemOneRequest": {
+        "type": "object",
+        "description": "A shared state plus the questions to ask about it.",
+        "required": [
+          "state",
+          "questions"
+        ],
+        "properties": {
+          "calibration": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Calibration",
+                "description": "Overrides the calibration applied to label logits."
+              }
+            ]
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Model name or configured alias. Falls back to the server's default when absent."
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Question"
+            },
+            "description": "The questions. Ids must be unique within a request."
+          },
+          "state": {
+            "type": "string",
+            "description": "The context every question is asked against."
+          }
+        }
+      },
+      "SystemOneResponse": {
+        "type": "object",
+        "required": [
+          "answers",
+          "model",
+          "usage",
+          "timing_ms"
+        ],
+        "properties": {
+          "answers": {
+            "type": "object",
+            "description": "Answers keyed by the question id they were asked under.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Answer"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "model": {
+            "type": "string",
+            "description": "The model actually used, after alias resolution."
+          },
+          "timing_ms": {
+            "$ref": "#/components/schemas/Timing"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          }
+        }
+      },
+      "Timing": {
+        "type": "object",
+        "required": [
+          "total"
+        ],
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "Usage": {
+        "type": "object",
+        "required": [
+          "input_tokens",
+          "questions"
+        ],
+        "properties": {
+          "input_tokens": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Prompt tokens summed over every question in the request.",
+            "minimum": 0
+          },
+          "questions": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "cerno",
+      "description": "System-one decisions over local models"
+    }
+  ]
+}
