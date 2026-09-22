@@ -45,6 +45,13 @@ pub enum ConfigError {
          configure it or pick one of: {known:?}"
     )]
     UnknownDefault { model: String, known: Vec<String> },
+
+    /// A temperature that is zero, negative or not finite. Zero turns every answer uniform and a
+    /// negative value inverts the ranking, both without a single error at request time.
+    #[error(
+        "model {alias:?} has calibration temperature {temperature}; it must be finite and above zero"
+    )]
+    InvalidCalibration { alias: String, temperature: f64 },
 }
 
 /// One entry in the model table.
@@ -182,15 +189,31 @@ impl Config {
             )?),
         };
 
+        config.validate()?;
+        Ok(config)
+    }
+
+    /// Reject a configuration that would start but answer wrongly.
+    fn validate(&self) -> Result<(), ConfigError> {
+        for (alias, entry) in &self.models {
+            let temperature = entry.calibration.temperature;
+            if !temperature.is_finite() || temperature <= 0.0 {
+                return Err(ConfigError::InvalidCalibration {
+                    alias: alias.clone(),
+                    temperature,
+                });
+            }
+        }
+
         // A default nobody can reach is a startup fault, not a runtime surprise.
-        if config.strict_models && config.resolve(&config.default_model).is_none() {
+        if self.strict_models && self.resolve(&self.default_model).is_none() {
             return Err(ConfigError::UnknownDefault {
-                model: config.default_model.clone(),
-                known: config.models.keys().cloned().collect(),
+                model: self.default_model.clone(),
+                known: self.models.keys().cloned().collect(),
             });
         }
 
-        Ok(config)
+        Ok(())
     }
 
     /// Resolve a caller-supplied name to a host model and the calibration it implies.
@@ -273,6 +296,39 @@ mod tests {
         assert!(config(true).resolve("granite4:3b").is_none());
         assert!(config(true).resolve("small").is_some());
         assert!(config(true).resolve("gemma4:e2b-it-qat").is_some());
+    }
+
+    /// A negative temperature inverts every ranking and zero flattens every answer to uniform;
+    /// neither may reach a request.
+    #[test]
+    fn a_non_positive_or_non_finite_temperature_is_refused_at_startup() {
+        for temperature in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            let mut config = config(false);
+            config
+                .models
+                .insert("bad".into(), entry("gemma4:e2b-it-qat", temperature));
+
+            assert!(
+                matches!(
+                    config.validate(),
+                    Err(ConfigError::InvalidCalibration { ref alias, .. }) if alias == "bad"
+                ),
+                "temperature {temperature} was accepted"
+            );
+        }
+
+        assert!(config(false).validate().is_ok());
+    }
+
+    #[test]
+    fn strict_mode_refuses_an_unreachable_default() {
+        let mut config = config(true);
+        config.default_model = "missing".into();
+
+        assert!(matches!(
+            config.validate(),
+            Err(ConfigError::UnknownDefault { .. })
+        ));
     }
 
     #[test]
