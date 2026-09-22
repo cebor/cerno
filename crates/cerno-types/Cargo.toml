@@ -1,0 +1,16 @@
+[package]
+name = "cerno-types"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+schema = ["dep:utoipa"]
+
+[dependencies]
+serde = { workspace = true }
+utoipa = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
