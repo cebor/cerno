@@ -83,7 +83,7 @@ cargo run --release -p cerno-server
 cargo run --release -p cerno-tui
 ```
 
-The service listens on `0.0.0.0:3000` and the front end looks there by default, so there is
+The service listens on `127.0.0.1:3000` and the front end looks there by default, so there is
 nothing to configure. `localhost:3000 ●` in its status bar means the two found each other.
 
 **The first request takes 5–10 seconds** while Ollama loads the model into VRAM; after that it
@@ -179,7 +179,7 @@ Deployment knobs are environment variables; the model table is an optional TOML 
 
 | Variable | Default | |
 |---|---|---|
-| `CERNO_BIND` | `0.0.0.0:3000` | |
+| `CERNO_BIND` | `127.0.0.1:3000` | Loopback only. cerno has no authentication; set `0.0.0.0:3000` only where the network is trusted |
 | `CERNO_HOST` | `ollama` | `ollama`, `vllm`, `llamacpp`, `lmstudio` or `openai` |
 | `CERNO_HOST_URL` | depends on `CERNO_HOST` | See [Hosts](#hosts) |
 | `CERNO_HOST_API_KEY` | — | Bearer token for the OpenAI-compatible hosts |

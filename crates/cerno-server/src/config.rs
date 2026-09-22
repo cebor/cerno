@@ -11,7 +11,10 @@ use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::time::Duration;
 
-const DEFAULT_BIND: &str = "0.0.0.0:3000";
+/// Loopback only. The service has no authentication of its own, so listening on every interface
+/// by default would hand the model — and, with an OpenAI key configured, the bill — to anyone on
+/// the network. A container or a shared box opts in with `CERNO_BIND=0.0.0.0:3000`.
+const DEFAULT_BIND: &str = "127.0.0.1:3000";
 const DEFAULT_MODEL: &str = "gemma4:e2b-it-qat";
 const DEFAULT_KEEP_ALIVE: &str = "5m";
 const DEFAULT_CONCURRENCY: usize = 4;

@@ -53,6 +53,22 @@ async fn main() -> ExitCode {
         "cerno starting"
     );
 
+    // Nothing here authenticates a caller. Reachable from the network with a paid key behind
+    // it, anyone who can reach the port spends on it; say so where an operator will see it.
+    if !config.bind.ip().is_loopback() {
+        tracing::warn!(
+            bind = %config.bind,
+            "listening beyond loopback without authentication; anyone who can reach this port \
+             can query {}{}",
+            config.host,
+            if config.host_api_key.is_some() {
+                " with the configured API key"
+            } else {
+                ""
+            }
+        );
+    }
+
     let bind = config.bind;
     let app = build_router(AppState::new(engine, config));
 
