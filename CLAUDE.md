@@ -124,9 +124,59 @@ ties by p50), so the verdict in the generated doc stays true when the benchmark 
 - **The first request loads the model.** Measured at 5–10 s cold against 36 ms warm. Benchmarks
   send a warm-up question first and discard it; anything else timing a live call should too.
 
+## The TUI keeps its logic out of the terminal
+
+`crates/cerno-tui` is split so that everything deciding *what* happens is testable without a
+terminal: `draft.rs` parses the fields, `app.rs` holds the state, `keys.rs` turns key presses
+into transitions, `session.rs` persists, and only `render.rs` draws. `tests/render.rs` covers
+the drawing through `ratatui::backend::TestBackend`, including asserting that the refused
+question is actually coloured red — a buffer carries styles, so that is checkable rather than a
+matter of trust.
+
+`tests/conformance.rs` drives the form from `spec/conformance/cases.json` and asserts the body
+it produces is identical to the SDKs'. The cases already describe a question neutrally, which is
+the same shape as a `QuestionDraft`, so the fourth client hangs on the same truth as the other
+three for free.
+
+**Dependencies are pinned by construction, not by care.** `ratatui-textarea` 0.9 and `ratatui`
+0.30 agree because both sit on `ratatui-core ^0.1` and `ratatui-widgets ^0.3`. There is no direct
+`crossterm` dependency at all — `ratatui::crossterm` is the re-export — so a second crossterm
+version cannot appear. The older `tui-textarea` is stuck on ratatui 0.29 and is not an option.
+
+## A default belongs beside a field, not inside it
+
+Twice the editor pre-filled a field with its default and left the cursor in it, so typing joined
+rather than replaced: a typed "urgent" became `urgentq1`, and a typed rubric became
+`5unkritisch, gering, …`. Both shipped through a green test suite and were found by driving the
+real binary in a pty.
+
+The id and levels fields therefore start **empty**, their default is shown in the field's title
+(`id (blank → q2)`), and `Editor::finish` substitutes it when the field is left blank. Every
+field's cursor starts at the end of its contents so typing appends. If a third field ever gets a
+default, it goes the same way.
+
+## Two traps in the event loop
+
+**Do not gate a `select!` branch on `JoinHandle::is_finished`.** The health probe did, and a
+probe against a refusing port completes in under a millisecond — before the first `select!`. The
+guard then disabled the branch and the result was never collected, so the status bar sat on "?"
+instead of saying the service was unreachable. It now arrives over a channel, which holds the
+message whether or not anyone was looking. `spawn_probe` says so at the call site.
+
+**A cancelled request can still land.** `Esc` aborts the task, but a result already on the
+channel arrives anyway, so `App::finish_send` drops anything that turns up while the app is not
+sending. Without it, Esc appeared to work and then the screen changed by itself a moment later.
+
+## Testing a TUI end to end
+
+`script` is not usable for it: `printf 'hello' | script -qec cat /dev/null` prints `hellohello`,
+and that doubling looked exactly like an application bug for a while. Drive a pty directly
+instead — `pty.openpty`, `TIOCSWINSZ` for a real size, write keys on a schedule, then replay the
+ANSI stream into a grid to read the final screen. Without the window size the program draws
+nothing at all and the capture is empty.
+
 ## Not built yet
 
-`crates/cerno-tui` — ratatui on `cerno-sdk`. Deferred deliberately until the service and SDKs
-settled. A llama.cpp host is the other open seam: implement `ModelHost` and report a real
+A llama.cpp host is the remaining open seam: implement `ModelHost` and report a real
 `max_top_logprobs`; llama.cpp's own ceiling is higher than Ollama's, which is why `Engine`
 takes the minimum of that and `MAX_OPTIONS` rather than hard-coding 20.

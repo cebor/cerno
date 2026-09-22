@@ -1,0 +1,19 @@
+[package]
+name = "cerno-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+cerno-sdk = { workspace = true }
+cerno-types = { workspace = true }
+# crossterm is deliberately absent: ratatui re-exports it as `ratatui::crossterm`, so there is
+# exactly one crossterm version in the tree by construction rather than by careful pinning.
+ratatui = "0.30"
+ratatui-textarea = "0.9"
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

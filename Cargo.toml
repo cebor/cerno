@@ -7,6 +7,7 @@ members = [
     "crates/cerno-server",
     "crates/cerno-sdk",
     "crates/cerno-bench",
+    "crates/cerno-tui",
 ]
 
 [workspace.package]
@@ -22,7 +23,7 @@ cerno-core = { path = "crates/cerno-core" }
 cerno-sdk = { path = "crates/cerno-sdk" }
 
 axum = "0.8"
-tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "sync"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

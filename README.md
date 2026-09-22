@@ -98,6 +98,40 @@ const answers = await client.systemone(text)
 All three are written by hand against `spec/openapi.json` and tested against the same
 [conformance cases](spec/conformance/cases.json), so they cannot drift apart silently.
 
+## The terminal front end
+
+```bash
+cargo run -p cerno-tui            # or --url http://host:3000, or CERNO_URL
+```
+
+```
+┌ State (1) ───────────────────────┐┌ Answers ─────────────────────────────┐
+│Ticket: Serverraum-Klima          ││sev      score → 5 "kritisch" conf 0.69│
+│ausgefallen, 31 Grad und steigend.││          expected 4.80                │
+└──────────────────────────────────┘│  1 unkritisch▎░░░░░░░░░░░░░░░░░  0.9% │
+┌ Questions (2) ───────────────────┐│  4 hoch      ██░░░░░░░░░░░░░░░░  8.2% │
+│  urgent    noul   Ist das dring… ││  5 kritisch  █████████████████░ 87.6% │
+│  team      choice IT | Facility  ││                                       │
+│▸ sev       score  unkritisch | … ││team     choice → Facility   conf 0.965│
+│  + add question  (a)             ││  IT          ░░░░░░░░░░░░░░░░░░  0.2% │
+│                                  ││  Facility    █████████████████▉ 99.4% │
+└──────────────────────────────────┘└───────────────────────────────────────┘
+ localhost:3000 ● · default model · ^S send · ? help
+```
+
+Type a state, add questions with `a`, send with `Ctrl+S`. `Tab` moves between panes, `t` and
+`T` step the calibration temperature and `c` clears it, `m` cycles the models the service
+offers, `?` lists the keys. The form is saved on exit and comes back on the next start.
+
+The bars are the reason it exists. `curl` gives you the winner; the terminal shows you how close
+the runner-up was, which is the difference between "Facility" and "Facility, but it was nearly
+IT". A run at a higher temperature next to one at 1.0 shows the calibration working directly.
+
+**The TUI validates nothing.** It builds the request through `cerno-sdk` and lets the service
+decide; a refusal is shown with its error code, and the question the service blamed is marked in
+the list. A fourth copy of the rules, after `cerno-core`, the OpenAPI document and the SDKs,
+would be the copy that drifts.
+
 ## Choosing a model
 
 `cargo run -p cerno-bench` scores candidates over a labelled dataset and writes
@@ -148,6 +182,7 @@ crates/
   cerno-core     labels, prompt, logprob maths, engine
   cerno-server   axum + utoipa
   cerno-sdk      Rust client
+  cerno-tui      terminal front end, on cerno-sdk
   cerno-bench    model benchmark
 sdks/python      uv package `cerno`
 sdks/typescript  npm package `@cerno/sdk`
@@ -168,12 +203,14 @@ would be a new file, not a new design.
 - **Logprobs wobble.** Identical requests can return logprobs differing in the third decimal —
   GPU reduction order, not calibration. It does not change answers; it does mean exact equality
   is the wrong assertion in a test against a live model.
-- **The TUI is not built yet.** It is next, on `cerno-sdk`.
+- **The TUI has no mouse support and no history.** One form, one request, and the last one is
+  remembered across restarts. Comparing two runs side by side means running them one after the
+  other and reading the numbers.
 
 ## Development
 
 ```bash
-cargo test --workspace
+cargo test --workspace          # includes the TUI, which needs no terminal to test
 cd sdks/python && uv run pytest
 cd sdks/typescript && npm test
 ```
