@@ -536,6 +536,28 @@ mod tests {
         app.questions = vec![draft("a")];
         app.mark_stale();
         assert!(!app.stale, "no answers on screen, so nothing goes stale");
+
+        let generation = app.begin_send();
+        assert!(app.finish_send(generation, Ok(no_answers())));
+        assert!(!app.stale, "fresh answers are current");
+
+        app.delete_selected();
+        assert!(
+            app.stale,
+            "a changed form must mark the answers on screen stale"
+        );
+    }
+
+    fn no_answers() -> Answers {
+        Answers::from(cerno_sdk::SystemOneResponse {
+            answers: Default::default(),
+            model: "m".into(),
+            usage: cerno_types::Usage {
+                input_tokens: 0,
+                questions: 0,
+            },
+            timing_ms: cerno_types::Timing { total: 0 },
+        })
     }
 }
 
