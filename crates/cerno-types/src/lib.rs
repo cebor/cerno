@@ -17,6 +17,12 @@ use utoipa::ToSchema;
 /// observable probability. See [`Answer`]'s `truncated` flag for the partial case.
 pub const MAX_OPTIONS: usize = 20;
 
+/// Most questions in a single request.
+///
+/// Every question is a forward pass, and they share one concurrency limit with every other
+/// caller. Without a bound, one request could queue thousands of passes ahead of everyone else.
+pub const MAX_QUESTIONS: usize = 32;
+
 /// Fewest levels a [`ScoreSpec`] rubric may have. One level is not a judgement.
 pub const MIN_LEVELS: u8 = 2;
 
@@ -277,6 +283,8 @@ pub struct ErrorResponse {
 pub enum ErrorCode {
     /// More than [`MAX_OPTIONS`] options. v1 does not split these across passes.
     TooManyOptions,
+    /// More than [`MAX_QUESTIONS`] questions in one request.
+    TooManyQuestions,
     /// Option list empty, or a single option — there is nothing to decide.
     TooFewOptions,
     /// Level count outside [`MIN_LEVELS`]..=[`MAX_LEVELS`].

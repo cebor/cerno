@@ -9,8 +9,8 @@ use cerno_host::{
     FirstTokenDistribution, FirstTokenRequest, HostCapabilities, HostError, ModelHost,
 };
 use cerno_types::{
-    Answer, Calibration, ChoiceSpec, ErrorCode, LevelSpec, Question, QuestionKind, ScoreSpec,
-    SystemOneRequest,
+    Answer, Calibration, ChoiceSpec, ErrorCode, LevelSpec, MAX_QUESTIONS, Question, QuestionKind,
+    ScoreSpec, SystemOneRequest,
 };
 use std::sync::{Arc, Mutex};
 
@@ -502,6 +502,26 @@ async fn validation_rejects_duplicate_ids_empty_state_and_no_questions() {
     assert_eq!(
         engine.validate(&request(vec![])).unwrap_err().code(),
         ErrorCode::NoQuestions
+    );
+}
+
+/// One request must not be able to queue an unbounded number of forward passes.
+#[tokio::test]
+async fn validation_caps_the_number_of_questions() {
+    let (engine, host) = engine(&[("A", -0.1)]);
+    let questions = |n: usize| (0..n).map(|i| noul(&format!("q{i}"), "a?")).collect();
+
+    assert!(engine.validate(&request(questions(MAX_QUESTIONS))).is_ok());
+    assert_eq!(
+        engine
+            .validate(&request(questions(MAX_QUESTIONS + 1)))
+            .unwrap_err()
+            .code(),
+        ErrorCode::TooManyQuestions
+    );
+    assert!(
+        host.seen.lock().unwrap().is_empty(),
+        "validation must not reach the host"
     );
 }
 

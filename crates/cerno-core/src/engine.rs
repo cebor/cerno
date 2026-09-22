@@ -7,8 +7,8 @@
 use crate::{labels, math, prompt};
 use cerno_host::{FirstTokenDistribution, FirstTokenRequest, HostError, ModelHost};
 use cerno_types::{
-    Answer, Calibration, ErrorCode, LevelProbability, MAX_LEVELS, MAX_OPTIONS, MIN_LEVELS,
-    OptionProbability, Question, QuestionKind, SystemOneRequest,
+    Answer, Calibration, ErrorCode, LevelProbability, MAX_LEVELS, MAX_OPTIONS, MAX_QUESTIONS,
+    MIN_LEVELS, OptionProbability, Question, QuestionKind, SystemOneRequest,
 };
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -133,6 +133,18 @@ impl Engine {
                     format!("calibration temperature must be finite and above zero, got {t}"),
                 ));
             }
+        }
+
+        if request.questions.len() > MAX_QUESTIONS {
+            return Err(EngineError::invalid(
+                ErrorCode::TooManyQuestions,
+                None,
+                format!(
+                    "a request may have at most {MAX_QUESTIONS} questions, got {}; send the rest \
+                     in a second request",
+                    request.questions.len()
+                ),
+            ));
         }
 
         let mut seen = BTreeMap::new();

@@ -16,6 +16,7 @@ use cerno_types::{ErrorCode, ErrorResponse};
 pub fn status_for(code: ErrorCode) -> StatusCode {
     match code {
         ErrorCode::TooManyOptions
+        | ErrorCode::TooManyQuestions
         | ErrorCode::TooFewOptions
         | ErrorCode::InvalidLevels
         | ErrorCode::EmptyState
@@ -88,6 +89,7 @@ mod tests {
     fn caller_mistakes_are_unprocessable() {
         for code in [
             ErrorCode::TooManyOptions,
+            ErrorCode::TooManyQuestions,
             ErrorCode::TooFewOptions,
             ErrorCode::InvalidLevels,
             ErrorCode::EmptyState,

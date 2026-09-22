@@ -262,6 +262,12 @@ async fn invalid_requests_report_a_machine_readable_code() {
                    "questions": [{"id": "q", "noul": "a?"}]}),
             "invalid_calibration",
         ),
+        (
+            json!({"state": "s", "questions": (0..33)
+                .map(|i| json!({"id": format!("q{i}"), "noul": "a?"}))
+                .collect::<Vec<_>>()}),
+            "too_many_questions",
+        ),
     ];
 
     for (request, expected) in cases {
