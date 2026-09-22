@@ -110,7 +110,8 @@ export type ErrorCode =
   | "invalid_calibration"
   | "no_label_matched"
   | "host_unavailable"
-  | "host_timeout";
+  | "host_timeout"
+  | "internal";
 
 export interface ErrorResponse {
   code: ErrorCode;

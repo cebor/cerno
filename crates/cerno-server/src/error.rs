@@ -27,6 +27,7 @@ pub fn status_for(code: ErrorCode) -> StatusCode {
 
         ErrorCode::NoLabelMatched | ErrorCode::HostUnavailable => StatusCode::BAD_GATEWAY,
         ErrorCode::HostTimeout => StatusCode::GATEWAY_TIMEOUT,
+        ErrorCode::Internal => StatusCode::INTERNAL_SERVER_ERROR,
     }
 }
 
@@ -117,6 +118,14 @@ mod tests {
         assert_eq!(
             status_for(ErrorCode::HostTimeout),
             StatusCode::GATEWAY_TIMEOUT
+        );
+    }
+
+    #[test]
+    fn a_failure_inside_cerno_is_an_internal_error() {
+        assert_eq!(
+            status_for(ErrorCode::Internal),
+            StatusCode::INTERNAL_SERVER_ERROR
         );
     }
 }

@@ -291,4 +291,6 @@ pub enum ErrorCode {
     NoLabelMatched,
     HostUnavailable,
     HostTimeout,
+    /// A failure inside cerno itself. Not the caller's doing, and not the model's.
+    Internal,
 }

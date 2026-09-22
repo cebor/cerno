@@ -152,6 +152,11 @@
       "name": "host timed out",
       "status": 504,
       "body": {"code": "host_timeout", "message": "host timed out after 30s"}
+    },
+    {
+      "name": "internal failure",
+      "status": 500,
+      "body": {"code": "internal", "message": "answering question \"q\" failed to complete: task panicked", "question_id": "q"}
     }
   ]
 }

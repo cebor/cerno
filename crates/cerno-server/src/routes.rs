@@ -8,7 +8,7 @@ use cerno_types::{
     Answer, Calibration, ErrorCode, ErrorResponse, ModelInfo, ModelsResponse, SystemOneRequest,
     SystemOneResponse, Timing, Usage,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::time::Instant;
 use tokio::task::JoinSet;
 
@@ -44,6 +44,9 @@ pub async fn models(State(state): State<AppState>) -> Json<ModelsResponse> {
 ///
 /// Every question is one forward pass, and they are independent, so they run concurrently up to
 /// the configured limit rather than one after another.
+///
+/// The request succeeds or fails as a whole: if any question fails, the error names it and the
+/// answers to the others are discarded.
 #[utoipa::path(
     post,
     path = "/v1/systemone",
@@ -53,6 +56,7 @@ pub async fn models(State(state): State<AppState>) -> Json<ModelsResponse> {
         (status = 422, body = ErrorResponse, description = "the request cannot be answered as written"),
         (status = 502, body = ErrorResponse, description = "the model or its runtime failed"),
         (status = 504, body = ErrorResponse, description = "the host timed out"),
+        (status = 500, body = ErrorResponse, description = "a failure inside cerno"),
     ),
     tag = "cerno",
 )]
@@ -84,37 +88,45 @@ pub async fn systemone(
     state.engine.validate(&request)?;
 
     let mut tasks = JoinSet::new();
+    // Which question each task answers. A task that panics comes back as a bare JoinError, so
+    // the id has to be recoverable from the task alone.
+    let mut question_of = HashMap::new();
     for question in request.questions.clone() {
         let engine = state.engine.clone();
         let semaphore = state.semaphore.clone();
         let state_text = request.state.clone();
         let model = model.clone();
 
-        tasks.spawn(async move {
+        let id = question.id.clone();
+        let handle = tasks.spawn(async move {
             let _permit = semaphore
                 .acquire_owned()
                 .await
                 .expect("semaphore is never closed");
-            let id = question.id.clone();
-            let result = engine
+            engine
                 .answer(&state_text, &question, &model, calibration)
-                .await;
-            (id, result)
+                .await
         });
+        question_of.insert(handle.id(), id);
     }
 
     let mut answers: BTreeMap<String, Answer> = BTreeMap::new();
     let mut input_tokens: u32 = 0;
 
-    while let Some(joined) = tasks.join_next().await {
-        let (id, result) = joined.map_err(|e| {
-            ApiError::new(
-                ErrorCode::HostUnavailable,
-                format!("answering question {e} failed to complete"),
-            )
+    while let Some(joined) = tasks.join_next_with_id().await {
+        let (task, result) = joined.map_err(|e| {
+            let id = question_of.get(&e.id()).cloned();
+            ApiError {
+                code: ErrorCode::Internal,
+                message: format!("answering question {id:?} failed to complete: {e}"),
+                question_id: id,
+            }
         })?;
 
         let (answer, tokens) = result?;
+        let id = question_of
+            .remove(&task)
+            .expect("every task was registered when it was spawned");
         input_tokens = input_tokens.saturating_add(tokens);
         answers.insert(id, answer);
     }
