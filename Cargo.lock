@@ -104,6 +104,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cerno-bench"
+version = "0.1.0"
+dependencies = [
+ "cerno-core",
+ "cerno-host",
+ "cerno-types",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "cerno-core"
 version = "0.1.0"
 dependencies = [

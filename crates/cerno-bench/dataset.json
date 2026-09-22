@@ -1,0 +1,43 @@
+{
+  "note": "Cases are deliberately unambiguous: a wrong answer here is the model's, not the label's. Mixed German and English, because the service is asked questions in both.",
+  "cases": [
+    {"id": "n01", "state": "Ticket: Serverraum-Klimaanlage ausgefallen, Temperatur 31 Grad und steigend.", "noul": "Ist das dringend?", "expect_yes": true},
+    {"id": "n02", "state": "Ticket: Kollege fragt, ob der Konferenzraum naechsten Monat frei ist.", "noul": "Ist das dringend?", "expect_yes": false},
+    {"id": "n03", "state": "Mail: Ihre Rechnung Nr. 4711 ueber 240 EUR ist beigefuegt.", "noul": "Geht es in dieser Nachricht um Geld?", "expect_yes": true},
+    {"id": "n04", "state": "Mail: Das Sommerfest findet am 12. Juli im Innenhof statt.", "noul": "Geht es in dieser Nachricht um Geld?", "expect_yes": false},
+    {"id": "n05", "state": "Ticket: Ich kann mich seit heute frueh nicht mehr im VPN anmelden.", "noul": "Beschreibt der Text ein technisches Problem?", "expect_yes": true},
+    {"id": "n06", "state": "Ticket: Vielen Dank fuer die schnelle Hilfe gestern, alles laeuft wieder.", "noul": "Beschreibt der Text ein technisches Problem?", "expect_yes": false},
+    {"id": "n07", "state": "Review: Das Geraet kam kaputt an und der Support meldet sich nicht.", "noul": "Ist die Bewertung positiv?", "expect_yes": false},
+    {"id": "n08", "state": "Review: Laeuft seit sechs Monaten einwandfrei, klare Empfehlung.", "noul": "Ist die Bewertung positiv?", "expect_yes": true},
+    {"id": "n09", "state": "Email: Please confirm the wire transfer to the new account before close of business.", "noul": "Does this message request a financial action?", "expect_yes": true},
+    {"id": "n10", "state": "Email: The office plants will be watered by the facility team on Fridays.", "noul": "Does this message request a financial action?", "expect_yes": false},
+    {"id": "n11", "state": "Log: OutOfMemoryError in worker-3, process terminated, queue backing up.", "noul": "Does this indicate a production failure?", "expect_yes": true},
+    {"id": "n12", "state": "Log: Scheduled backup completed in 42 seconds, 0 errors.", "noul": "Does this indicate a production failure?", "expect_yes": false},
+    {"id": "n13", "state": "Nachricht: Mein Passwort laeuft morgen ab, wie setze ich es zurueck?", "noul": "Ist das eine Frage?", "expect_yes": true},
+    {"id": "n14", "state": "Nachricht: Das Passwort wurde gestern erfolgreich zurueckgesetzt.", "noul": "Ist das eine Frage?", "expect_yes": false},
+
+    {"id": "c01", "state": "Ticket: Der Netzwerkdrucker im 2. Stock nimmt keine Druckauftraege mehr an, die Warteschlange haengt.", "choice": {"question": "Welches Team ist zustaendig?", "options": ["IT", "Personal", "Vertrieb", "Buchhaltung"]}, "expect": 0},
+    {"id": "c02", "state": "Ticket: Meine Gehaltsabrechnung fuer Maerz fehlt im Portal.", "choice": {"question": "Welches Team ist zustaendig?", "options": ["IT", "Personal", "Vertrieb", "Buchhaltung"]}, "expect": 1},
+    {"id": "c03", "state": "Ticket: Ein Kunde moechte ein Angebot fuer 200 Lizenzen.", "choice": {"question": "Welches Team ist zustaendig?", "options": ["IT", "Personal", "Vertrieb", "Buchhaltung"]}, "expect": 2},
+    {"id": "c04", "state": "Ticket: Die Eingangsrechnung von Lieferant Meier wurde doppelt gebucht.", "choice": {"question": "Welches Team ist zustaendig?", "options": ["IT", "Personal", "Vertrieb", "Buchhaltung"]}, "expect": 3},
+    {"id": "c05", "state": "Der Text ist auf Deutsch verfasst und beschreibt ein Rezept fuer Kartoffelsuppe.", "choice": {"question": "In welcher Sprache ist der beschriebene Text?", "options": ["Englisch", "Deutsch", "Franzoesisch", "Spanisch"]}, "expect": 1},
+    {"id": "c06", "state": "Review: Absolut begeistert, funktioniert besser als erwartet.", "choice": {"question": "Welche Stimmung hat die Bewertung?", "options": ["positiv", "neutral", "negativ"]}, "expect": 0},
+    {"id": "c07", "state": "Review: Das Produkt wurde am Dienstag geliefert.", "choice": {"question": "Welche Stimmung hat die Bewertung?", "options": ["positiv", "neutral", "negativ"]}, "expect": 1},
+    {"id": "c08", "state": "Review: Nach zwei Tagen kaputt, Geld zurueck verlangt.", "choice": {"question": "Welche Stimmung hat die Bewertung?", "options": ["positiv", "neutral", "negativ"]}, "expect": 2},
+    {"id": "c09", "state": "Error: connection refused on port 5432 when the API starts up.", "choice": {"question": "Which layer is failing?", "options": ["frontend", "database", "authentication", "payment provider"]}, "expect": 1},
+    {"id": "c10", "state": "Error: 401 returned for every request, token appears expired.", "choice": {"question": "Which layer is failing?", "options": ["frontend", "database", "authentication", "payment provider"]}, "expect": 2},
+    {"id": "c11", "state": "Message: Could you send me the slides from yesterday's workshop?", "choice": {"question": "What kind of message is this?", "options": ["a request", "a complaint", "an announcement", "a thank you"]}, "expect": 0},
+    {"id": "c12", "state": "Message: Starting Monday the canteen opens at 11:30 instead of 12:00.", "choice": {"question": "What kind of message is this?", "options": ["a request", "a complaint", "an announcement", "a thank you"]}, "expect": 2},
+
+    {"id": "s01", "state": "Ticket: Gesamtes Rechenzentrum offline, alle Kunden betroffen, kein Workaround.", "score": {"question": "Wie schwerwiegend ist der Vorfall?", "levels": ["unkritisch", "gering", "mittel", "hoch", "kritisch"]}, "expect": 5, "tolerance": 0},
+    {"id": "s02", "state": "Ticket: Ein Tippfehler im Impressum auf der Webseite.", "score": {"question": "Wie schwerwiegend ist der Vorfall?", "levels": ["unkritisch", "gering", "mittel", "hoch", "kritisch"]}, "expect": 1, "tolerance": 1},
+    {"id": "s03", "state": "Ticket: Drei von zwanzig Mitarbeitern koennen sich nicht im VPN anmelden, Workaround vorhanden.", "score": {"question": "Wie schwerwiegend ist der Vorfall?", "levels": ["unkritisch", "gering", "mittel", "hoch", "kritisch"]}, "expect": 3, "tolerance": 1},
+    {"id": "s04", "state": "Review: Perfekt, nichts auszusetzen, wuerde ich sofort wieder kaufen.", "score": {"question": "Wie viele Sterne von fuenf?", "levels": 5}, "expect": 5, "tolerance": 0},
+    {"id": "s05", "state": "Review: Totaler Reinfall, defekt und der Support ignoriert mich.", "score": {"question": "Wie viele Sterne von fuenf?", "levels": 5}, "expect": 1, "tolerance": 0},
+    {"id": "s06", "state": "Review: Ganz okay fuer den Preis, ein paar Schwaechen, aber brauchbar.", "score": {"question": "Wie viele Sterne von fuenf?", "levels": 5}, "expect": 3, "tolerance": 1},
+    {"id": "s07", "state": "Text: Die Mitochondrien sind die Kraftwerke der Zelle.", "score": {"question": "How complex is this text for a lay reader?", "levels": ["very easy", "easy", "moderate", "hard", "very hard"]}, "expect": 2, "tolerance": 1},
+    {"id": "s08", "state": "Text: The renormalisation group flow of the effective action near a non-Gaussian fixed point.", "score": {"question": "How complex is this text for a lay reader?", "levels": ["very easy", "easy", "moderate", "hard", "very hard"]}, "expect": 5, "tolerance": 1},
+    {"id": "s09", "state": "Email: URGENT!!! Your account is suspended, click here within 24h to verify your password.", "score": {"question": "How likely is this a phishing attempt?", "levels": ["very unlikely", "unlikely", "possible", "likely", "very likely"]}, "expect": 5, "tolerance": 1},
+    {"id": "s10", "state": "Email: Hi, attached are the minutes from our Tuesday planning meeting. Regards, Anna.", "score": {"question": "How likely is this a phishing attempt?", "levels": ["very unlikely", "unlikely", "possible", "likely", "very likely"]}, "expect": 1, "tolerance": 1}
+  ]
+}

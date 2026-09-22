@@ -4,6 +4,7 @@ members = [
     "crates/cerno-types",
     "crates/cerno-host",
     "crates/cerno-core",
+    "crates/cerno-bench",
 ]
 
 [workspace.package]
