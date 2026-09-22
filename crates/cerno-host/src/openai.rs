@@ -138,19 +138,16 @@ impl OpenAiCompatHost {
             request = request.bearer_auth(key);
         }
 
-        let response = request.send().await.map_err(|e| {
-            if e.is_timeout() {
-                HostError::Timeout(self.timeout)
-            } else {
-                HostError::Unavailable(e.to_string())
-            }
-        })?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| HostError::transport(&e, self.timeout))?;
 
         let status = response.status().as_u16();
         let text = response
             .text()
             .await
-            .map_err(|e| HostError::Protocol(e.to_string()))?;
+            .map_err(|e| HostError::transport(&e, self.timeout))?;
         Ok((status, text))
     }
 }

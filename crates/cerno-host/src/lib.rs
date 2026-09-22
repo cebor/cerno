@@ -177,6 +177,16 @@ impl HostError {
         };
         Self::Status { status, body }
     }
+
+    /// Map a transport failure, keeping a timeout a timeout wherever in the exchange it struck —
+    /// sending the request or reading the body.
+    fn transport(error: &reqwest::Error, timeout: Duration) -> Self {
+        if error.is_timeout() {
+            Self::Timeout(timeout)
+        } else {
+            Self::Unavailable(error.to_string())
+        }
+    }
 }
 
 #[async_trait]
