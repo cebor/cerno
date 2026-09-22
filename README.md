@@ -69,12 +69,27 @@ would otherwise have produced quietly wrong answers:
 
 ## Getting started
 
+Two terminals: the service stays in the foreground, something else talks to it.
+
 ```bash
-ollama pull gemma4:e2b-it-qat
-cargo run -p cerno-server
+ollama pull gemma4:e2b-it-qat          # once, 4.3 GB
+
+# terminal 1 — the service
+cargo run --release -p cerno-server
+
+# terminal 2 — the terminal front end
+cargo run --release -p cerno-tui
 ```
 
-Then `http://localhost:3000/docs` for Swagger UI, or one of the SDKs:
+The service listens on `0.0.0.0:3000` and the front end looks there by default, so there is
+nothing to configure. `localhost:3000 ●` in its status bar means the two found each other.
+
+**The first request takes 5–10 seconds** while Ollama loads the model into VRAM; after that it
+is around 150 ms. `--release` matters most for the front end, where a debug build makes typing
+noticeably sluggish.
+
+With the service running, `http://localhost:3000/docs` is the Swagger UI, and `curl` or one of
+the SDKs works just as well:
 
 ```rust
 let answers = client.systemone(text)
@@ -100,9 +115,8 @@ All three are written by hand against `spec/openapi.json` and tested against the
 
 ## The terminal front end
 
-```bash
-cargo run -p cerno-tui            # or --url http://host:3000, or CERNO_URL
-```
+Started above. It points at `http://localhost:3000` unless `--url` or `CERNO_URL` says
+otherwise.
 
 ```
 ┌ State (1) ───────────────────────┐┌ Answers ─────────────────────────────┐

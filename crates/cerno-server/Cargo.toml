@@ -3,6 +3,9 @@ name = "cerno-server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+# The package also ships `cerno-openapi`, which writes the spec. Without this, `cargo run -p
+# cerno-server` is ambiguous and fails rather than starting the service.
+default-run = "cerno-server"
 
 [dependencies]
 cerno-types = { workspace = true, features = ["schema"] }
