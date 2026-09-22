@@ -294,7 +294,7 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
     }
 
     match &app.status {
-        Status::Sending { started } => {
+        Status::Sending { started, .. } => {
             const SPINNER: [char; 4] = ['|', '/', '-', '\\'];
             spans.push(Span::styled(
                 format!(

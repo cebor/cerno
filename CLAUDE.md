@@ -191,8 +191,11 @@ instead of saying the service was unreachable. It now arrives over a channel, wh
 message whether or not anyone was looking. `spawn_probe` says so at the call site.
 
 **A cancelled request can still land.** `Esc` aborts the task, but a result already on the
-channel arrives anyway, so `App::finish_send` drops anything that turns up while the app is not
-sending. Without it, Esc appeared to work and then the screen changed by itself a moment later.
+channel arrives anyway. Without a guard, Esc appeared to work and then the screen changed by
+itself a moment later. "Drop it unless we are sending" is not enough: after Esc and a second
+send, the first result arrives *while* the second is in flight. Every send therefore gets a
+generation from `App::begin_send`, the result travels with it, and `App::finish_send` accepts
+only the current one.
 
 ## Testing a TUI end to end
 

@@ -73,7 +73,8 @@ async fn run(
     client: Client,
 ) -> Result<(), std::io::Error> {
     let mut events = spawn_event_reader();
-    let (answer_tx, mut answer_rx) = mpsc::unbounded_channel::<Result<Answers, Error>>();
+    // Each result carries the generation of the send that produced it; see `App::finish_send`.
+    let (answer_tx, mut answer_rx) = mpsc::unbounded_channel::<(u64, Result<Answers, Error>)>();
     let mut probe = spawn_probe(client.clone());
 
     let mut ticker = tokio::time::interval(TICK);
@@ -100,9 +101,10 @@ async fn run(
                             let client = client.clone();
                             let tx = answer_tx.clone();
 
-                            app.begin_send();
+                            let generation = app.begin_send();
                             inflight = Some(tokio::spawn(async move {
-                                let _ = tx.send(form.build(&client).send().await);
+                                let result = form.build(&client).send().await;
+                                let _ = tx.send((generation, result));
                             }));
                         }
                         Action::None => {}
@@ -120,9 +122,12 @@ async fn run(
                 Some(_) => {}
             },
 
-            Some(result) = answer_rx.recv() => {
-                app.finish_send(result);
-                inflight = None;
+            Some((generation, result)) = answer_rx.recv() => {
+                // Only the current request's result clears the handle; a stale one must leave
+                // the request in flight abortable.
+                if app.finish_send(generation, result) {
+                    inflight = None;
+                }
                 dirty = true;
             }
 

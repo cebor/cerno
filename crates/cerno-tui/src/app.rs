@@ -42,7 +42,12 @@ impl Focus {
 #[derive(Debug)]
 pub enum Status {
     Idle,
-    Sending { started: Instant },
+    Sending {
+        started: Instant,
+        /// Which send this is. A result carrying any other number belongs to a request that was
+        /// cancelled, and must not land as the answer to this one.
+        generation: u64,
+    },
     Failed(Failure),
 }
 
@@ -95,6 +100,8 @@ pub struct App {
     pub should_quit: bool,
     /// Advances once per tick; drives the spinner.
     pub tick: u64,
+    /// Counts sends, so a result can be matched to the request that produced it.
+    generation: u64,
 }
 
 impl App {
@@ -116,6 +123,7 @@ impl App {
             healthy: None,
             should_quit: false,
             tick: 0,
+            generation: 0,
         }
     }
 
@@ -235,17 +243,29 @@ impl App {
         matches!(self.status, Status::Sending { .. })
     }
 
-    pub fn begin_send(&mut self) {
+    /// Enter the sending state and return the generation the result must carry to be accepted.
+    pub fn begin_send(&mut self) -> u64 {
+        self.generation += 1;
         self.status = Status::Sending {
             started: Instant::now(),
+            generation: self.generation,
         };
+        self.generation
     }
 
-    pub fn finish_send(&mut self, result: Result<Answers, Error>) {
+    /// Take a request's result. Returns whether it was accepted, i.e. whether it belonged to the
+    /// request currently in flight.
+    pub fn finish_send(&mut self, generation: u64, result: Result<Answers, Error>) -> bool {
         // A cancelled request can still land: the task is aborted, but a result already on the
-        // channel arrives anyway. Dropping it here keeps Esc meaning what it says.
-        if !self.is_sending() {
-            return;
+        // channel arrives anyway. Checking only "are we sending" is not enough — after Esc and
+        // a second send, the first result would arrive while the second is in flight and be
+        // shown as its answer. The generation says which request a result belongs to.
+        match self.status {
+            Status::Sending {
+                generation: current,
+                ..
+            } if current == generation => {}
+            _ => return false,
         }
 
         match result {
@@ -261,6 +281,7 @@ impl App {
                 self.status = Status::Failed(Failure::from_error(&error));
             }
         }
+        true
     }
 
     pub fn cancel_send(&mut self) {
@@ -528,15 +549,37 @@ mod late_result_tests {
     #[test]
     fn a_result_arriving_after_a_cancel_is_dropped() {
         let mut app = App::new(Session::default(), "http://cerno.test".into());
-        app.begin_send();
+        let cancelled = app.begin_send();
         app.cancel_send();
 
-        app.finish_send(Err(Error::MissingAnswer("late".into())));
+        app.finish_send(cancelled, Err(Error::MissingAnswer("late".into())));
 
         assert!(
             app.failure().is_none(),
             "a cancelled request left an error behind"
         );
         assert!(matches!(app.status, Status::Idle));
+    }
+
+    /// Esc, then a second send: the first request's result can still be on the channel, and it
+    /// arrives while the second one is in flight. It must not be taken for the second's answer.
+    #[test]
+    fn a_cancelled_result_is_not_taken_for_the_next_requests_answer() {
+        let mut app = App::new(Session::default(), "http://cerno.test".into());
+        let cancelled = app.begin_send();
+        app.cancel_send();
+        let current = app.begin_send();
+
+        app.finish_send(cancelled, Err(Error::MissingAnswer("late".into())));
+
+        assert!(app.failure().is_none(), "the stale result was shown");
+        assert!(app.is_sending(), "the second request is still in flight");
+
+        app.finish_send(current, Err(Error::MissingAnswer("current".into())));
+
+        assert!(
+            app.failure().is_some(),
+            "the current request's result was dropped"
+        );
     }
 }
