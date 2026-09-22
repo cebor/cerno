@@ -285,6 +285,9 @@ pub enum ErrorCode {
     TooManyOptions,
     /// More than [`MAX_QUESTIONS`] questions in one request.
     TooManyQuestions,
+    /// The body is not a request at all: malformed JSON, a wrong type, or a field it does not
+    /// recognise.
+    InvalidRequest,
     /// Option list empty, or a single option — there is nothing to decide.
     TooFewOptions,
     /// Level count outside [`MIN_LEVELS`]..=[`MAX_LEVELS`].

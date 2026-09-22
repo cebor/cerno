@@ -1,6 +1,6 @@
 //! HTTP handlers.
 
-use crate::error::ApiError;
+use crate::error::{ApiError, ApiJson};
 use crate::state::AppState;
 use axum::Json;
 use axum::extract::State;
@@ -53,6 +53,7 @@ pub async fn models(State(state): State<AppState>) -> Json<ModelsResponse> {
     request_body = SystemOneRequest,
     responses(
         (status = 200, body = SystemOneResponse),
+        (status = 400, body = ErrorResponse, description = "the body is not a valid request"),
         (status = 422, body = ErrorResponse, description = "the request cannot be answered as written"),
         (status = 502, body = ErrorResponse, description = "the model or its runtime failed"),
         (status = 504, body = ErrorResponse, description = "the host timed out"),
@@ -62,7 +63,7 @@ pub async fn models(State(state): State<AppState>) -> Json<ModelsResponse> {
 )]
 pub async fn systemone(
     State(state): State<AppState>,
-    Json(request): Json<SystemOneRequest>,
+    ApiJson(request): ApiJson<SystemOneRequest>,
 ) -> Result<Json<SystemOneResponse>, ApiError> {
     let started = Instant::now();
 

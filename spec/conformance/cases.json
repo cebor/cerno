@@ -159,6 +159,11 @@
       "body": {"code": "too_many_questions", "message": "a request may have at most 32 questions, got 33"}
     },
     {
+      "name": "body is not a valid request",
+      "status": 400,
+      "body": {"code": "invalid_request", "message": "questions[0]: unknown field `chioce`"}
+    },
+    {
       "name": "internal failure",
       "status": 500,
       "body": {"code": "internal", "message": "answering question \"q\" failed to complete: task panicked", "question_id": "q"}

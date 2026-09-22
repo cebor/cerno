@@ -1,6 +1,8 @@
 //! Mapping engine failures onto HTTP.
 
 use axum::Json;
+use axum::extract::rejection::JsonRejection;
+use axum::extract::{FromRequest, Request};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use cerno_core::EngineError;
@@ -15,6 +17,9 @@ use cerno_types::{ErrorCode, ErrorResponse};
 /// model — not the caller's.
 pub fn status_for(code: ErrorCode) -> StatusCode {
     match code {
+        // Not a request at all, as opposed to a request that cannot be answered.
+        ErrorCode::InvalidRequest => StatusCode::BAD_REQUEST,
+
         ErrorCode::TooManyOptions
         | ErrorCode::TooManyQuestions
         | ErrorCode::TooFewOptions
@@ -29,6 +34,31 @@ pub fn status_for(code: ErrorCode) -> StatusCode {
         ErrorCode::NoLabelMatched | ErrorCode::HostUnavailable => StatusCode::BAD_GATEWAY,
         ErrorCode::HostTimeout => StatusCode::GATEWAY_TIMEOUT,
         ErrorCode::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+/// `axum::Json`, except that a body it cannot read is refused as an [`ErrorResponse`].
+///
+/// axum's own rejection is plain text, which every SDK would report as `UnexpectedResponse`
+/// — the answer to a proxy getting in the way — when the actual fault is a typo the caller can
+/// fix. Routing it through [`ApiError`] gives it a code like every other failure.
+pub struct ApiJson<T>(pub T);
+
+impl<T, S> FromRequest<S> for ApiJson<T>
+where
+    Json<T>: FromRequest<S, Rejection = JsonRejection>,
+    S: Send + Sync,
+{
+    type Rejection = ApiError;
+
+    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+        match Json::<T>::from_request(req, state).await {
+            Ok(Json(value)) => Ok(Self(value)),
+            Err(rejection) => Err(ApiError::new(
+                ErrorCode::InvalidRequest,
+                rejection.body_text(),
+            )),
+        }
     }
 }
 
@@ -120,6 +150,14 @@ mod tests {
         assert_eq!(
             status_for(ErrorCode::HostTimeout),
             StatusCode::GATEWAY_TIMEOUT
+        );
+    }
+
+    #[test]
+    fn a_body_that_is_not_a_request_is_a_bad_request() {
+        assert_eq!(
+            status_for(ErrorCode::InvalidRequest),
+            StatusCode::BAD_REQUEST
         );
     }
 

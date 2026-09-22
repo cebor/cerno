@@ -60,6 +60,16 @@
               }
             }
           },
+          "400": {
+            "description": "the body is not a valid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "the request cannot be answered as written",
             "content": {
@@ -303,6 +313,7 @@
         "enum": [
           "too_many_options",
           "too_many_questions",
+          "invalid_request",
           "too_few_options",
           "invalid_levels",
           "empty_state",

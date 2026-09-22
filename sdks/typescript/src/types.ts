@@ -101,6 +101,7 @@ export interface SystemOneResponse {
 export type ErrorCode =
   | "too_many_options"
   | "too_many_questions"
+  | "invalid_request"
   | "too_few_options"
   | "invalid_levels"
   | "empty_state"

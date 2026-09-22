@@ -282,6 +282,51 @@ async fn invalid_requests_report_a_machine_readable_code() {
     }
 }
 
+/// A body the service cannot even read is still answered in its own error shape, so an SDK can
+/// tell a caller's typo from a proxy in the way.
+#[tokio::test]
+async fn a_body_that_is_not_a_request_is_refused_with_a_code() {
+    let server = mockito::Server::new_async().await;
+    let url = server.url();
+
+    let cases = [
+        // A misspelt primitive.
+        json!({"state": "s", "questions": [{"id": "q", "chioce": {"options": ["a", "b"]}}]}),
+        // A level count that does not fit the type.
+        json!({"state": "s", "questions": [{"id": "q", "score": {"levels": 300}}]}),
+    ];
+
+    for request in cases {
+        let (status, body) = post(app(config(&url, false)), "/v1/systemone", request.clone()).await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{request}: {body}");
+        assert_eq!(body["code"], "invalid_request", "{request}: {body}");
+        assert!(body["message"].is_string(), "{body}");
+    }
+}
+
+#[tokio::test]
+async fn a_body_that_is_not_json_is_refused_with_a_code() {
+    let server = mockito::Server::new_async().await;
+
+    let response = app(config(&server.url(), false))
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/systemone")
+                .header("content-type", "application/json")
+                .body(Body::from("{ not json"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let body: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["code"], "invalid_request");
+}
+
 /// A model answering in prose is an operator problem, not a caller problem.
 #[tokio::test]
 async fn a_model_that_ignores_the_instruction_is_a_bad_gateway() {
