@@ -103,19 +103,24 @@ All three are written by hand against `spec/openapi.json` and tested against the
 `cargo run -p cerno-bench` scores candidates over a labelled dataset and writes
 [docs/model-selection.md](docs/model-selection.md). The current result:
 
-| Model | Fidelity | Accuracy | p50 | Brier | Best T |
-|---|---|---|---|---|---|
-| `gemma4:26b-a4b-it-q4_K_M` *(reference)* | 100% | 97% | 87 ms | 0.029 | 3.20 |
-| **`gemma4:e2b-it-qat`** | 100% | **97%** | **36 ms** | **0.006** | 0.80 |
-| `granite4:3b` | 100% | 81% | 26 ms | 0.168 | 2.10 |
-| `phi4-mini:3.8b` | 100% | 86% | 26 ms | 0.023 | 2.25 |
+| Model                        | Fidelity | Accuracy | p50 (ms) | Brier | Best T |
+|:-----------------------------|---------:|---------:|---------:|------:|-------:|
+| `gemma4:26b-a4b-it-q4_K_M` † |     100% |      97% |      202 | 0.029 |   3.20 |
+| `gemma4:e2b-it-qat`          |     100% |      97% |       40 | 0.006 |   0.80 |
+| `granite4:3b`                |      97% |      78% |       23 | 0.167 |   2.20 |
+| `phi4-mini:3.8b`             |     100% |      86% |       28 | 0.023 |   2.25 |
 
-The 4 GB model matches a 26B model's accuracy at 2.4× the speed, and is *better* calibrated:
-the large model needs its logits flattened by 3.2 before its confidences mean anything, while
-the small one is very slightly under-confident.
+† Reference model — the yardstick, not a candidate. A snapshot of the generated document above;
+latency depends on hardware and on what else is holding VRAM, so it moves between runs while
+the accuracy and calibration columns stay put.
+
+The 4 GB model matches the 26B reference's accuracy on a quarter of the footprint, several
+times faster, and is *better* calibrated: the large model needs its logits flattened by 3.2
+before its confidences mean anything, while the small one is very slightly under-confident.
 
 **Fidelity is a gate, not a score.** A model that answers in prose instead of a letter is
-unusable here at any accuracy, which is why the benchmark reports it first.
+unusable here at any accuracy, which is why the benchmark reports it first — and why
+`granite4:3b`, which slipped to 97% on this run, is not a candidate regardless of its speed.
 
 ## Configuration
 

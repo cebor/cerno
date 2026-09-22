@@ -401,6 +401,75 @@ fn pick_winner<'a>(reports: &'a [Report], reference: Option<&str>) -> Option<&'a
         })
 }
 
+/// Render a markdown table with padded cells, the first column left-aligned and the rest right.
+///
+/// Markdown does not need the padding, but a generated file is read as often in a terminal as in
+/// a renderer, and an unpadded table with a column as wide and as variable as a model name is
+/// hard to scan in either. Right-aligning the numbers lines up their digits.
+fn markdown_table(headers: &[&str], rows: &[Vec<String>]) -> String {
+    // Column width in characters. Every cell here is ASCII apart from the dagger and the em
+    // dash, neither of which is double-width, so counting chars is the right measure.
+    let widths: Vec<usize> = headers
+        .iter()
+        .enumerate()
+        .map(|(i, header)| {
+            rows.iter()
+                .filter_map(|row| row.get(i))
+                .map(|cell| cell.chars().count())
+                .chain(std::iter::once(header.chars().count()))
+                .max()
+                .unwrap_or(0)
+        })
+        .collect();
+
+    let pad = |cell: &str, width: usize, right: bool| {
+        let fill = " ".repeat(width.saturating_sub(cell.chars().count()));
+        if right {
+            format!("{fill}{cell}")
+        } else {
+            format!("{cell}{fill}")
+        }
+    };
+
+    let mut out = String::new();
+
+    let header: Vec<String> = headers
+        .iter()
+        .zip(&widths)
+        .enumerate()
+        .map(|(i, (h, w))| pad(h, *w, i > 0))
+        .collect();
+    out.push_str(&format!("| {} |\n", header.join(" | ")));
+
+    // A cell occupies width + 2 columns, from the space either side of it. The rule has one
+    // alignment colon and no spaces, so it needs width + 1 dashes to line up with the rest.
+    let rule: Vec<String> = widths
+        .iter()
+        .enumerate()
+        .map(|(i, w)| {
+            let dashes = "-".repeat(w + 1);
+            if i == 0 {
+                format!(":{dashes}")
+            } else {
+                format!("{dashes}:")
+            }
+        })
+        .collect();
+    out.push_str(&format!("|{}|\n", rule.join("|")));
+
+    for row in rows {
+        let cells: Vec<String> = row
+            .iter()
+            .zip(&widths)
+            .enumerate()
+            .map(|(i, (cell, w))| pad(cell, *w, i > 0))
+            .collect();
+        out.push_str(&format!("| {} |\n", cells.join(" | ")));
+    }
+
+    out
+}
+
 fn render(reports: &[Report], dataset: &Dataset, reference: Option<&str>) -> String {
     let mut out = String::new();
     out.push_str("# Model selection\n\n");
@@ -412,31 +481,55 @@ fn render(reports: &[Report], dataset: &Dataset, reference: Option<&str>) -> Str
         dataset.cases.iter().filter(|c| c.score.is_some()).count(),
     ));
 
-    out.push_str("| Model | Fidelity | Accuracy | noul | choice | score | p50 | p99 | Truncated | Brier | Best T | Agreement |\n");
-    out.push_str("|---|---|---|---|---|---|---|---|---|---|---|---|\n");
+    let headers = [
+        "Model",
+        "Fidelity",
+        "Accuracy",
+        "noul",
+        "choice",
+        "score",
+        "p50 (ms)",
+        "p99 (ms)",
+        "Truncated",
+        "Brier",
+        "Best T",
+        "Agreement",
+    ];
 
-    for r in reports {
-        let marker = if Some(r.model.as_str()) == reference {
-            " *(reference)*"
-        } else {
-            ""
-        };
-        out.push_str(&format!(
-            "| `{}`{} | {} | {} | {} | {} | {} | {} ms | {} ms | {} | {:.3} | {:.2} | {} |\n",
-            r.model,
-            marker,
-            pct(r.fidelity),
-            pct(r.accuracy),
-            pct(r.per_primitive.get("noul").copied().unwrap_or(f64::NAN)),
-            pct(r.per_primitive.get("choice").copied().unwrap_or(f64::NAN)),
-            pct(r.per_primitive.get("score").copied().unwrap_or(f64::NAN)),
-            r.p50,
-            r.p99,
-            pct(r.truncation),
-            r.brier,
-            r.best_t,
-            r.agreement.map(pct).unwrap_or_else(|| "—".into()),
-        ));
+    let mut reference_seen = false;
+    let rows: Vec<Vec<String>> = reports
+        .iter()
+        .map(|r| {
+            // The reference is marked with a dagger rather than an inline "(reference)": the
+            // model column already holds the widest values in the table, and a parenthetical
+            // there widened it by half again and left the column ragged.
+            let is_reference = Some(r.model.as_str()) == reference;
+            reference_seen |= is_reference;
+
+            vec![
+                format!("`{}`{}", r.model, if is_reference { " †" } else { "" }),
+                pct(r.fidelity),
+                pct(r.accuracy),
+                pct(r.per_primitive.get("noul").copied().unwrap_or(f64::NAN)),
+                pct(r.per_primitive.get("choice").copied().unwrap_or(f64::NAN)),
+                pct(r.per_primitive.get("score").copied().unwrap_or(f64::NAN)),
+                r.p50.to_string(),
+                r.p99.to_string(),
+                pct(r.truncation),
+                format!("{:.3}", r.brier),
+                format!("{:.2}", r.best_t),
+                r.agreement.map(pct).unwrap_or_else(|| "—".into()),
+            ]
+        })
+        .collect();
+
+    out.push_str(&markdown_table(&headers, &rows));
+
+    if reference_seen {
+        out.push_str(
+            "\n† Reference model — the yardstick the Agreement column is measured against, \
+             not a candidate.\n",
+        );
     }
 
     if let Some(winner) = pick_winner(reports, reference) {
@@ -473,4 +566,62 @@ fn render(reports: &[Report], dataset: &Dataset, reference: Option<&str>) -> Str
     );
 
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The table is read in a terminal as often as in a renderer, so every row — the rule
+    /// included — has to be the same width. Pinned character for character.
+    #[test]
+    fn table_columns_line_up_exactly() {
+        let table = markdown_table(
+            &["Model", "p50 (ms)"],
+            &[
+                vec!["`gemma4:e2b-it-qat`".into(), "37".into()],
+                vec!["`x`".into(), "1234".into()],
+            ],
+        );
+
+        assert_eq!(
+            table,
+            "\
+| Model               | p50 (ms) |
+|:--------------------|---------:|
+| `gemma4:e2b-it-qat` |       37 |
+| `x`                 |     1234 |
+"
+        );
+    }
+
+    #[test]
+    fn every_line_of_a_table_is_the_same_width() {
+        let table = markdown_table(
+            &["Model", "Brier", "Agreement"],
+            &[
+                vec![
+                    "`gemma4:26b-a4b-it-q4_K_M` †".into(),
+                    "0.029".into(),
+                    "—".into(),
+                ],
+                vec!["`granite4:3b`".into(), "0.168".into(), "75%".into()],
+            ],
+        );
+
+        let widths: Vec<usize> = table.lines().map(|l| l.chars().count()).collect();
+
+        assert!(
+            widths.windows(2).all(|w| w[0] == w[1]),
+            "ragged table, line widths {widths:?}:\n{table}"
+        );
+    }
+
+    /// A value wider than its header must widen the column, not overflow it.
+    #[test]
+    fn a_long_cell_widens_its_column() {
+        let table = markdown_table(&["T"], &[vec!["a-very-long-value".into()]]);
+
+        assert!(table.starts_with("| T                 |\n"), "{table}");
+    }
 }
