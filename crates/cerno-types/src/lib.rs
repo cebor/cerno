@@ -34,7 +34,11 @@ pub const MAX_LEVELS: u8 = 10;
 // ---------------------------------------------------------------------------------------------
 
 /// A shared state plus the questions to ask about it.
+///
+/// Unknown fields are refused rather than ignored: a misspelt `calibraton` would otherwise
+/// be dropped without a word, and the answers would come back uncalibrated.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "schema", derive(ToSchema))]
 pub struct SystemOneRequest {
     /// The context every question is asked against.
@@ -57,6 +61,7 @@ pub struct SystemOneRequest {
 /// `1.0` leaves the model's raw distribution untouched. Values above 1 flatten it, which is the
 /// usual correction for instruct-tuned models that answer clear cases at a probability of 1.0.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "schema", derive(ToSchema))]
 pub struct Calibration {
     pub temperature: f64,
@@ -68,13 +73,50 @@ impl Default for Calibration {
     }
 }
 
-/// One question, identified so its answer can be found in the response map.
+/// One question, identified so its answer can be found in the response map. It names exactly one
+/// primitive.
+//
+// Read through `RawQuestion` rather than derived: with `flatten`, serde would take the first
+// primitive key it met and silently drop a second one, and it cannot refuse unknown fields.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(try_from = "RawQuestion")]
 #[cfg_attr(feature = "schema", derive(ToSchema))]
 pub struct Question {
     pub id: String,
     #[serde(flatten)]
     pub kind: QuestionKind,
+}
+
+/// The wire form of a [`Question`], before it is checked to name exactly one primitive.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawQuestion {
+    id: String,
+    #[serde(default)]
+    noul: Option<String>,
+    #[serde(default)]
+    choice: Option<ChoiceSpec>,
+    #[serde(default)]
+    score: Option<ScoreSpec>,
+}
+
+impl TryFrom<RawQuestion> for Question {
+    type Error = String;
+
+    fn try_from(raw: RawQuestion) -> Result<Self, Self::Error> {
+        let kind = match (raw.noul, raw.choice, raw.score) {
+            (Some(noul), None, None) => QuestionKind::Noul(noul),
+            (None, Some(choice), None) => QuestionKind::Choice(choice),
+            (None, None, Some(score)) => QuestionKind::Score(score),
+            _ => {
+                return Err(format!(
+                    "question {:?} must have exactly one of `noul`, `choice` or `score`",
+                    raw.id
+                ));
+            }
+        };
+        Ok(Self { id: raw.id, kind })
+    }
 }
 
 /// The three primitives. Externally tagged, so the wire form is `{"id": .., "noul": ..}`.
@@ -91,6 +133,7 @@ pub enum QuestionKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "schema", derive(ToSchema))]
 pub struct ChoiceSpec {
     /// What is being asked. Omit when the options speak for themselves.
@@ -100,6 +143,7 @@ pub struct ChoiceSpec {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "schema", derive(ToSchema))]
 pub struct ScoreSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -285,8 +329,8 @@ pub enum ErrorCode {
     TooManyOptions,
     /// More than [`MAX_QUESTIONS`] questions in one request.
     TooManyQuestions,
-    /// The body is not a request at all: malformed JSON, a wrong type, or a field it does not
-    /// recognise.
+    /// The body is not a request at all: malformed JSON, a wrong type, an unknown field, or a
+    /// question naming more or fewer than one primitive.
     InvalidRequest,
     /// Option list empty, or a single option — there is nothing to decide.
     TooFewOptions,
@@ -304,4 +348,78 @@ pub enum ErrorCode {
     HostTimeout,
     /// A failure inside cerno itself. Not the caller's doing, and not the model's.
     Internal,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn question(value: serde_json::Value) -> Result<Question, serde_json::Error> {
+        serde_json::from_value(value)
+    }
+
+    #[test]
+    fn each_primitive_reads_back_from_its_wire_form() {
+        assert!(matches!(
+            question(json!({"id": "u", "noul": "Urgent?"}))
+                .unwrap()
+                .kind,
+            QuestionKind::Noul(_)
+        ));
+        assert!(matches!(
+            question(json!({"id": "t", "choice": {"options": ["a", "b"]}}))
+                .unwrap()
+                .kind,
+            QuestionKind::Choice(_)
+        ));
+        assert!(matches!(
+            question(json!({"id": "s", "score": {"levels": 5}}))
+                .unwrap()
+                .kind,
+            QuestionKind::Score(_)
+        ));
+    }
+
+    /// With a derived `flatten`, the first key would win and the second would vanish.
+    #[test]
+    fn a_question_naming_two_primitives_is_refused() {
+        let err = question(json!({
+            "id": "x",
+            "noul": "Urgent?",
+            "choice": {"options": ["a", "b"]}
+        }))
+        .unwrap_err();
+
+        assert!(err.to_string().contains("exactly one"), "{err}");
+    }
+
+    #[test]
+    fn a_question_naming_no_primitive_is_refused() {
+        assert!(question(json!({"id": "x"})).is_err());
+    }
+
+    /// A typo must fail loudly rather than drop the field it was meant to be.
+    #[test]
+    fn unknown_fields_are_refused_at_every_level() {
+        assert!(question(json!({"id": "x", "chioce": {"options": ["a", "b"]}})).is_err());
+        assert!(question(json!({"id": "x", "choice": {"options": ["a"], "opts": []}})).is_err());
+
+        let request = json!({
+            "state": "s",
+            "calibraton": {"temperature": 2.0},
+            "questions": [{"id": "u", "noul": "Urgent?"}]
+        });
+        assert!(serde_json::from_value::<SystemOneRequest>(request).is_err());
+    }
+
+    /// A question serialises to the same shape it is read from.
+    #[test]
+    fn a_question_round_trips() {
+        let wire = json!({"id": "t", "choice": {"question": "Which?", "options": ["a", "b"]}});
+
+        let back = serde_json::to_value(question(wire.clone()).unwrap()).unwrap();
+
+        assert_eq!(back, wire);
+    }
 }

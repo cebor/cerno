@@ -292,6 +292,11 @@ async fn a_body_that_is_not_a_request_is_refused_with_a_code() {
     let cases = [
         // A misspelt primitive.
         json!({"state": "s", "questions": [{"id": "q", "chioce": {"options": ["a", "b"]}}]}),
+        // Two primitives in one question.
+        json!({"state": "s", "questions": [{"id": "q", "noul": "a?", "score": {"levels": 5}}]}),
+        // A misspelt top-level field that would otherwise be ignored.
+        json!({"state": "s", "calibraton": {"temperature": 2.0},
+               "questions": [{"id": "q", "noul": "a?"}]}),
         // A level count that does not fit the type.
         json!({"state": "s", "questions": [{"id": "q", "score": {"levels": 300}}]}),
     ];

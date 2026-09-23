@@ -284,7 +284,8 @@
             "type": "number",
             "format": "double"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ChoiceSpec": {
         "type": "object",
@@ -305,7 +306,8 @@
             ],
             "description": "What is being asked. Omit when the options speak for themselves."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ErrorCode": {
         "type": "string",
@@ -463,7 +465,7 @@
             }
           }
         ],
-        "description": "One question, identified so its answer can be found in the response map."
+        "description": "One question, identified so its answer can be found in the response map. It names exactly one\nprimitive."
       },
       "QuestionKind": {
         "oneOf": [
@@ -524,11 +526,12 @@
               "null"
             ]
           }
-        }
+        },
+        "additionalProperties": false
       },
       "SystemOneRequest": {
         "type": "object",
-        "description": "A shared state plus the questions to ask about it.",
+        "description": "A shared state plus the questions to ask about it.\n\nUnknown fields are refused rather than ignored: a misspelt `calibraton` would otherwise\nbe dropped without a word, and the answers would come back uncalibrated.",
         "required": [
           "state",
           "questions"
@@ -563,7 +566,8 @@
             "type": "string",
             "description": "The context every question is asked against."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "SystemOneResponse": {
         "type": "object",
