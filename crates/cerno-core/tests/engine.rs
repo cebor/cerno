@@ -427,6 +427,31 @@ async fn the_prompt_carries_context_question_and_the_letter_instruction() {
     assert!(prompt.ends_with("Answer with one letter only."));
 }
 
+/// A blank question is no question: the TUI sends one for a score whose question field was left
+/// empty, and it must not put an empty `QUESTION:` line in front of the options.
+#[tokio::test]
+async fn a_blank_question_leaves_no_question_line() {
+    let (engine, host) = engine(&[("A", -0.1), ("B", -2.0)]);
+    let blank = Question {
+        id: "sev".into(),
+        kind: QuestionKind::Score(ScoreSpec {
+            question: Some("   ".into()),
+            levels: LevelSpec::Count(3),
+        }),
+    };
+
+    engine
+        .answer("Printer is jammed.", &blank, "m", Calibration::default())
+        .await
+        .unwrap();
+
+    assert!(
+        !host.last_prompt().contains("QUESTION:"),
+        "{}",
+        host.last_prompt()
+    );
+}
+
 // -------------------------------------------------------------------------------------------
 // Validation
 // -------------------------------------------------------------------------------------------

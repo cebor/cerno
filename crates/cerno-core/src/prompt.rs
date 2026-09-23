@@ -31,7 +31,14 @@ pub fn user_turn(state: &str, question: Option<&str>, options: &[(&str, &str)]) 
     for (label, text) in options {
         out.push_str(label);
         out.push_str(") ");
-        out.push_str(text);
+        // One line per option, always. A line break inside an option would start what looks to
+        // the model like the next option: `"x\nB) y"` offered an option B that was never asked.
+        for (i, word) in text.split_whitespace().enumerate() {
+            if i > 0 {
+                out.push(' ');
+            }
+            out.push_str(word);
+        }
         out.push('\n');
     }
 
@@ -76,6 +83,15 @@ mod tests {
 
         assert!(prompt.starts_with("CONTEXT:\npadded\n\n"));
         assert!(prompt.contains("QUESTION: Urgent?\n"));
+    }
+
+    /// An option containing a line break must not forge the next label.
+    #[test]
+    fn an_option_is_always_one_line() {
+        let prompt = user_turn("s", None, &[("A", "x\nB) y"), ("B", "  z  ")]);
+
+        assert!(prompt.contains("A) x B) y\nB) z\n"), "{prompt}");
+        assert_eq!(prompt.matches("\nB) ").count(), 1, "{prompt}");
     }
 
     #[test]

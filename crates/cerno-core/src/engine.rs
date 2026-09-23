@@ -351,14 +351,20 @@ fn ballot_for(kind: &QuestionKind) -> Ballot<'_> {
             options: vec!["Yes".to_string(), "No".to_string()],
         },
         QuestionKind::Choice(spec) => Ballot {
-            question: spec.question.as_deref(),
+            question: asked(&spec.question),
             options: spec.options.clone(),
         },
         QuestionKind::Score(spec) => Ballot {
-            question: spec.question.as_deref(),
+            question: asked(&spec.question),
             options: spec.levels.legend(),
         },
     }
+}
+
+/// The question text, if there is one worth asking. A blank question is the same as none: it
+/// would otherwise put an empty `QUESTION:` line in front of the options.
+fn asked(question: &Option<String>) -> Option<&str> {
+    question.as_deref().filter(|q| !q.trim().is_empty())
 }
 
 /// Map a token distribution onto the labels we offered.
