@@ -135,20 +135,20 @@ else
             *) die "$hash has an unknown Changelog trailer '$kinds' (see CONTRIBUTING.md)" ;;
         esac
 
-        # Changelog-Scope overrides the paths, for a change that only adjusts its neighbours.
+        # Scope overrides the paths, for a change that only adjusts its neighbours.
         if [[ -n $scope_trailer ]]; then
             scopes=$(tr ',' '\n' <<<"$scope_trailer" | tr -d ' \t' | tr '[:upper:]' '[:lower:]')
             while read -r scope; do
                 [[ " $all_scopes " == *" $scope "* ]] ||
-                    die "$hash has an unknown Changelog-Scope '$scope' (one of: $all_scopes)"
+                    die "$hash has an unknown Scope '$scope' (one of: $all_scopes)"
             done <<<"$scopes"
         else
             scopes=$(scopes_of "$hash")
             [[ -n $scopes ]] ||
-                die "$hash touches no subproject; add a Changelog-Scope trailer (one of: $all_scopes)"
+                die "$hash touches no subproject; add a Scope trailer (one of: $all_scopes)"
         fi
         entries+="$kinds - **$(scope_names "$scopes"):** $subject ($hash)"$'\n'
-    done < <(git log --reverse --format='%h%x1f%s%x1f%(trailers:key=Changelog,valueonly,separator=%x2C)%x1f%(trailers:key=Changelog-Scope,valueonly,separator=%x2C)%x1e' "$range")
+    done < <(git log --reverse --format='%h%x1f%s%x1f%(trailers:key=Changelog,valueonly,separator=%x2C)%x1f%(trailers:key=Scope,valueonly,separator=%x2C)%x1e' "$range")
 
     section="## [$version] - $(date +%F)"$'\n'
     for kind in Added Changed Deprecated Removed Fixed Security Performance; do

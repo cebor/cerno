@@ -209,12 +209,12 @@ example a service change that only adjusts an SDK's error mapping to match, say 
 second trailer, and the paths are then ignored:
 
 ```bash
-git commit --trailer "Changelog: fixed" --trailer "Changelog-Scope: service"
+git commit --trailer "Changelog: fixed" --trailer "Scope: service"
 ```
 
-`Changelog-Scope` takes one or more of `service`, `rust`, `python`, `typescript` and `tui`,
+`Scope` takes one or more of `service`, `rust`, `python`, `typescript` and `tui`,
 separated by commas. A commit with a `Changelog` trailer that touches none of these paths
-needs a `Changelog-Scope`; the release script stops without one.
+needs a `Scope`; the release script stops without one.
 
 The history before this convention has no trailers, so everything up to and including 0.1.0 is
 summarised by hand.
