@@ -162,12 +162,12 @@ would be the copy that drifts.
 
 | Model                        | Fidelity | Accuracy | p50 (ms) | Brier | Best T |
 |:-----------------------------|---------:|---------:|---------:|------:|-------:|
-| `gemma4:26b-a4b-it-q4_K_M` † |     100% |      97% |      202 | 0.029 |   3.20 |
+| `gemma4:26b-a4b-it-q4_K_M` ¹ |     100% |      97% |      202 | 0.029 |   3.20 |
 | `gemma4:e2b-it-qat`          |     100% |      97% |       40 | 0.006 |   0.80 |
 | `granite4:3b`                |      97% |      78% |       23 | 0.167 |   2.20 |
 | `phi4-mini:3.8b`             |     100% |      86% |       28 | 0.023 |   2.25 |
 
-† Reference model — the yardstick, not a candidate. A snapshot of the generated document above;
+¹ Reference model — the yardstick, not a candidate. A snapshot of the generated document above;
 latency depends on hardware and on what else is holding VRAM, so it moves between runs while
 the accuracy and calibration columns stay put.
 

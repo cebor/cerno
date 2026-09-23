@@ -510,14 +510,15 @@ fn render(reports: &[Report], dataset: &Dataset, reference: Option<&str>) -> Str
     let rows: Vec<Vec<String>> = reports
         .iter()
         .map(|r| {
-            // The reference is marked with a dagger rather than an inline "(reference)": the
-            // model column already holds the widest values in the table, and a parenthetical
-            // there widened it by half again and left the column ragged.
+            // The reference is marked with a footnote numeral rather than an inline
+            // "(reference)": the model column already holds the widest values in the table, and
+            // a parenthetical there widened it by half again and left the column ragged. Not a
+            // dagger: it reads as a cross to anyone who hasn't met it as a footnote mark.
             let is_reference = Some(r.model.as_str()) == reference;
             reference_seen |= is_reference;
 
             vec![
-                format!("`{}`{}", r.model, if is_reference { " †" } else { "" }),
+                format!("`{}`{}", r.model, if is_reference { " ¹" } else { "" }),
                 pct(r.fidelity),
                 pct(r.accuracy),
                 pct(r.per_primitive.get("noul").copied().unwrap_or(f64::NAN)),
@@ -537,7 +538,7 @@ fn render(reports: &[Report], dataset: &Dataset, reference: Option<&str>) -> Str
 
     if reference_seen {
         out.push_str(
-            "\n† Reference model — the yardstick the Agreement column is measured against, \
+            "\n¹ Reference model — the yardstick the Agreement column is measured against, \
              not a candidate.\n",
         );
     }
@@ -611,7 +612,7 @@ mod tests {
             &["Model", "Brier", "Agreement"],
             &[
                 vec![
-                    "`gemma4:26b-a4b-it-q4_K_M` †".into(),
+                    "`gemma4:26b-a4b-it-q4_K_M` ¹".into(),
                     "0.029".into(),
                     "—".into(),
                 ],
