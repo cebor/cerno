@@ -15,6 +15,9 @@ rust:
       files: [Cargo.lock]
     paths: [.cargo/registry, .cargo/git, target]
   script:
+    - rustup component add clippy rustfmt
+    - cargo fmt --check
+    - cargo clippy --workspace --all-targets --locked -- -D warnings
     - cargo test --workspace --locked
 
 python:
@@ -40,4 +43,7 @@ typescript:
   script:
     - cd sdks/typescript
     - npm ci --cache $CI_PROJECT_DIR/.npm --prefer-offline
+    - npm run typecheck
     - npm test
+    # Both module formats; the CJS one is otherwise never built before a publish.
+    - npm run build
