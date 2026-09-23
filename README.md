@@ -78,46 +78,74 @@ would otherwise have produced quietly wrong answers:
 
 ## Getting started
 
-Two terminals: the service stays in the foreground, something else talks to it.
+The service and the terminal front end are both on crates.io, so installing needs a Rust
+toolchain and nothing else:
 
 ```bash
 ollama pull gemma4:e2b-it-qat          # once, 4.3 GB
+cargo install cerno-server cerno-tui
+```
 
+Two terminals: the service stays in the foreground, something else talks to it.
+
+```bash
 # terminal 1 — the service
-cargo run --release -p cerno-server
+cerno-server
 
 # terminal 2 — the terminal front end
-cargo run --release -p cerno-tui
+cerno-tui
 ```
 
 The service listens on `127.0.0.1:3000` and the front end looks there by default, so there is
 nothing to configure. `localhost:3000 ●` in its status bar means the two found each other.
 
 **The first request takes 5–10 seconds** while Ollama loads the model into VRAM; after that it
-is around 150 ms. `--release` matters most for the front end, where a debug build makes typing
+is around 150 ms.
+
+From a checkout, `cargo run --release -p cerno-server` and `cargo run --release -p cerno-tui`
+do the same. `--release` matters most for the front end, where a debug build makes typing
 noticeably sluggish.
 
+### From code
+
 With the service running, `http://localhost:3000/docs` is the Swagger UI, and `curl` or one of
-the SDKs works just as well:
+the SDKs works just as well. All three are published as `cerno-sdk`:
+
+```bash
+cargo add cerno-sdk tokio --features tokio/macros,tokio/rt-multi-thread
+uv add cerno-sdk                       # or: pip install cerno-sdk
+npm install cerno-sdk
+```
 
 ```rust
+use cerno_sdk::Client;
+
+let client = Client::new("http://localhost:3000")?;
 let answers = client.systemone(text)
     .noul("urgent", "Is this urgent?")
     .choice("team", "Which team?", ["IT", "Facility"])
     .send().await?;
 ```
 ```python
+from cerno import Client
+
+client = Client("http://localhost:3000")
 answers = (client.systemone(text)
     .noul("urgent", "Is this urgent?")
     .choice("team", "Which team?", ["IT", "Facility"])
     .send())
 ```
 ```ts
+import { Client } from "cerno-sdk";
+
+const client = new Client("http://localhost:3000");
 const answers = await client.systemone(text)
   .noul("urgent", "Is this urgent?")
   .choice("team", "Which team?", ["IT", "Facility"])
   .send();
 ```
+
+The Python package installs as `cerno-sdk` and imports as `cerno`.
 
 All three are written by hand against `spec/openapi.json` and tested against the same
 [conformance cases](spec/conformance/cases.json), so they cannot drift apart silently.
