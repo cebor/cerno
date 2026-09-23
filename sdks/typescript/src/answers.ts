@@ -83,6 +83,11 @@ export class Answers {
     return this.get(id).truncated;
   }
 
+  /** The labels for `id` whose logprob is an upper bound rather than an observation. */
+  truncatedLabels(id: string): string[] {
+    return this.get(id).truncated_labels ?? [];
+  }
+
   /** The response exactly as the service sent it. */
   raw(): SystemOneResponse {
     return this.response;

@@ -58,6 +58,12 @@ interface AnswerBase {
    * an upper bound rather than an observation.
    */
   truncated: boolean;
+  /**
+   * The labels whose `raw_logprobs` entry is an upper bound rather than an observation. Empty
+   * unless `truncated`. A server predating this field omits it; `Answers.truncatedLabels` reads
+   * that as empty.
+   */
+  truncated_labels?: string[];
 }
 
 export interface NoulAnswer extends AnswerBase {

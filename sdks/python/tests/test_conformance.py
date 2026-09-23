@@ -80,6 +80,10 @@ def test_response_cases_read_back_the_expected_values(cases):
 
             if "truncated" in want:
                 assert answers.truncated(qid) is want["truncated"], f"{name}/{qid}"
+            if "truncated_labels" in want:
+                assert answers.truncated_labels(qid) == tuple(want["truncated_labels"]), (
+                    f"{name}/{qid}"
+                )
 
 
 def test_error_cases_raise_api_error_with_the_code(cases):

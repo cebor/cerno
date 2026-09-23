@@ -51,6 +51,7 @@ Every answer carries the evidence it came from:
 
 ```python
 answers.truncated("team")          # some label fell outside the host's reporting window
+answers.truncated_labels("team")   # ("C",) — which ones; their raw_logprobs entry is a bound
 answers["team"].raw_logprobs       # {"A": -4.54, "B": -0.02, ...}
 answers["team"].probabilities      # per option, in request order
 ```

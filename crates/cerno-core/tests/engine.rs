@@ -275,6 +275,7 @@ async fn a_label_outside_the_window_falls_back_to_the_floor_and_flags_truncation
     let Answer::Noul {
         noul,
         truncated,
+        truncated_labels,
         raw_logprobs,
         ..
     } = answer
@@ -285,6 +286,8 @@ async fn a_label_outside_the_window_falls_back_to_the_floor_and_flags_truncation
         truncated,
         "A was not reported, so the answer is an upper bound"
     );
+    // The answer names which label is the bound, so a caller can tell it from B's observation.
+    assert_eq!(truncated_labels, vec!["A".to_string()]);
     // A took the floor, which is the weakest reported entry.
     assert_eq!(raw_logprobs.get("A"), Some(&-15.5));
     assert!(noul < 0.001, "got {noul}");

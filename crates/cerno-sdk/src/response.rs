@@ -106,6 +106,12 @@ impl Answers {
         Ok(self.get(id)?.truncated())
     }
 
+    /// The labels for `id` whose logprob is an upper bound rather than an observation. Empty
+    /// unless [`Answers::truncated`].
+    pub fn truncated_labels(&self, id: &str) -> Result<&[String], Error> {
+        Ok(self.get(id)?.truncated_labels())
+    }
+
     pub fn ids(&self) -> impl Iterator<Item = &str> {
         self.response.answers.keys().map(String::as_str)
     }

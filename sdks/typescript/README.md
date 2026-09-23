@@ -45,6 +45,7 @@ Every answer carries the evidence it came from:
 
 ```ts
 answers.truncated("team");            // a label fell outside the host's reporting window
+answers.truncatedLabels("team");      // ["C"] — which ones; their raw_logprobs entry is a bound
 answers.get("team").raw_logprobs;     // { A: -4.54, B: -0.02, ... }
 answers.get("team").probabilities;    // per option, in request order
 ```

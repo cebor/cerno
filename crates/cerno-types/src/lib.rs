@@ -196,8 +196,14 @@ pub struct SystemOneResponse {
 
 /// A typed answer.
 ///
-/// Every variant carries `raw_logprobs` and `truncated` so a caller can redo the normalisation
-/// itself — calibration is a convenience here, never a place where information is lost.
+/// Every variant carries `raw_logprobs`, `truncated` and `truncated_labels` so a caller can redo
+/// the normalisation itself — calibration is a convenience here, never a place where information
+/// is lost.
+///
+/// A label in `truncated_labels` fell outside the host's reporting window, so its entry in
+/// `raw_logprobs` is the weakest reported logprob: an upper bound, not an observation.
+/// `truncated` is true exactly when that list is not empty. Servers predating the list omit
+/// it, which reads as empty.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "schema", derive(ToSchema))]
@@ -208,6 +214,8 @@ pub enum Answer {
         confidence: f64,
         raw_logprobs: BTreeMap<String, f64>,
         truncated: bool,
+        #[serde(default)]
+        truncated_labels: Vec<String>,
     },
     Choice {
         /// The winning option, verbatim as it was supplied.
@@ -219,6 +227,8 @@ pub enum Answer {
         probabilities: Vec<OptionProbability>,
         raw_logprobs: BTreeMap<String, f64>,
         truncated: bool,
+        #[serde(default)]
+        truncated_labels: Vec<String>,
     },
     Score {
         /// The most likely level, 1-based.
@@ -231,6 +241,8 @@ pub enum Answer {
         probabilities: Vec<LevelProbability>,
         raw_logprobs: BTreeMap<String, f64>,
         truncated: bool,
+        #[serde(default)]
+        truncated_labels: Vec<String>,
     },
 }
 
@@ -242,6 +254,22 @@ impl Answer {
             Self::Noul { truncated, .. }
             | Self::Choice { truncated, .. }
             | Self::Score { truncated, .. } => *truncated,
+        }
+    }
+
+    /// The labels whose logprob is a bound rather than an observation. Empty unless
+    /// [`Answer::truncated`].
+    pub fn truncated_labels(&self) -> &[String] {
+        match self {
+            Self::Noul {
+                truncated_labels, ..
+            }
+            | Self::Choice {
+                truncated_labels, ..
+            }
+            | Self::Score {
+                truncated_labels, ..
+            } => truncated_labels,
         }
     }
 
@@ -421,5 +449,20 @@ mod tests {
         let back = serde_json::to_value(question(wire.clone()).unwrap()).unwrap();
 
         assert_eq!(back, wire);
+    }
+
+    /// A server that predates `truncated_labels` omits it; that must read as empty.
+    #[test]
+    fn a_missing_truncated_labels_reads_as_empty() {
+        let answer: Answer = serde_json::from_value(json!({
+            "type": "noul",
+            "noul": 0.9,
+            "confidence": 0.5,
+            "raw_logprobs": {"A": -0.1, "B": -2.4},
+            "truncated": false
+        }))
+        .unwrap();
+
+        assert!(answer.truncated_labels().is_empty());
     }
 }

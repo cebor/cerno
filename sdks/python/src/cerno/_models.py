@@ -70,6 +70,8 @@ class Answer:
 
     ``raw_logprobs`` and ``truncated`` travel with every answer so a caller can redo the
     normalisation themselves: calibration is a convenience, never a place information is lost.
+    ``truncated_labels`` names the labels whose logprob is an upper bound rather than an
+    observation; a server predating it omits it, which reads as empty.
     """
 
     type: Literal["noul", "choice", "score"]
@@ -83,6 +85,7 @@ class Answer:
     expected_score: float | None = None
     legend: str | None = None
     probabilities: list[OptionProbability] | list[LevelProbability] = field(default_factory=list)
+    truncated_labels: tuple[str, ...] = ()
 
     @classmethod
     def parse(cls, data: Mapping[str, Any]) -> "Answer":
@@ -113,6 +116,7 @@ class Answer:
             expected_score=data.get("expected_score"),
             legend=data.get("legend"),
             probabilities=probabilities,
+            truncated_labels=tuple(data.get("truncated_labels", ())),
         )
 
 
@@ -196,3 +200,7 @@ class Answers:
         """Whether some label fell outside the host's reporting window, making its probability
         an upper bound rather than an observation."""
         return self[question_id].truncated
+
+    def truncated_labels(self, question_id: str) -> tuple[str, ...]:
+        """The labels whose logprob is an upper bound rather than an observation."""
+        return self[question_id].truncated_labels

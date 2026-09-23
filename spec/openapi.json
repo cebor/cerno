@@ -150,6 +150,12 @@
               "truncated": {
                 "type": "boolean"
               },
+              "truncated_labels": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "type": {
                 "type": "string",
                 "enum": [
@@ -202,6 +208,12 @@
               },
               "truncated": {
                 "type": "boolean"
+              },
+              "truncated_labels": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               },
               "type": {
                 "type": "string",
@@ -262,6 +274,12 @@
               "truncated": {
                 "type": "boolean"
               },
+              "truncated_labels": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "type": {
                 "type": "string",
                 "enum": [
@@ -271,7 +289,7 @@
             }
           }
         ],
-        "description": "A typed answer.\n\nEvery variant carries `raw_logprobs` and `truncated` so a caller can redo the normalisation\nitself — calibration is a convenience here, never a place where information is lost."
+        "description": "A typed answer.\n\nEvery variant carries `raw_logprobs`, `truncated` and `truncated_labels` so a caller can redo\nthe normalisation itself — calibration is a convenience here, never a place where information\nis lost.\n\nA label in `truncated_labels` fell outside the host's reporting window, so its entry in\n`raw_logprobs` is the weakest reported logprob: an upper bound, not an observation.\n`truncated` is true exactly when that list is not empty. Servers predating the list omit\nit, which reads as empty."
       },
       "Calibration": {
         "type": "object",

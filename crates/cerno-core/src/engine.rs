@@ -83,7 +83,8 @@ struct Tally {
     /// like any other value; `truncated` is what says one happened.
     logprobs: BTreeMap<String, f64>,
     confidence: f64,
-    truncated: bool,
+    /// The labels that fell outside the reported window and were given the floor.
+    truncated_labels: Vec<String>,
     input_tokens: u32,
 }
 
@@ -254,7 +255,8 @@ impl Engine {
                 noul: tally.probabilities[0],
                 confidence: tally.confidence,
                 raw_logprobs: tally.logprobs,
-                truncated: tally.truncated,
+                truncated: !tally.truncated_labels.is_empty(),
+                truncated_labels: tally.truncated_labels,
             },
 
             QuestionKind::Choice(spec) => {
@@ -273,7 +275,8 @@ impl Engine {
                         })
                         .collect(),
                     raw_logprobs: tally.logprobs,
-                    truncated: tally.truncated,
+                    truncated: !tally.truncated_labels.is_empty(),
+                    truncated_labels: tally.truncated_labels,
                 }
             }
 
@@ -296,7 +299,8 @@ impl Engine {
                         })
                         .collect(),
                     raw_logprobs: tally.logprobs,
-                    truncated: tally.truncated,
+                    truncated: !tally.truncated_labels.is_empty(),
+                    truncated_labels: tally.truncated_labels,
                 }
             }
         };
@@ -363,7 +367,7 @@ fn read_labels(
 ) -> Result<Tally, EngineError> {
     let mut logprobs = Vec::with_capacity(label_set.len());
     let mut observed_any = false;
-    let mut truncated = false;
+    let mut truncated_labels = Vec::new();
 
     for label in label_set {
         // Every token spelling this label counts toward it; see `math::logsumexp`.
@@ -376,7 +380,7 @@ fn read_labels(
 
         if variants.is_empty() {
             // Ranked below everything the host reported, so the floor is a strict upper bound.
-            truncated = true;
+            truncated_labels.push(label.to_string());
             logprobs.push(distribution.floor);
         } else {
             observed_any = true;
@@ -408,7 +412,7 @@ fn read_labels(
             .collect(),
         probabilities,
         confidence,
-        truncated,
+        truncated_labels,
         input_tokens: distribution.input_tokens,
     })
 }
