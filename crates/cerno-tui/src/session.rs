@@ -52,7 +52,7 @@ impl Session {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(path, serde_json::to_string_pretty(self)?)
+        write_private(path, &serde_json::to_string_pretty(self)?)
     }
 
     /// Save, reporting failure to the caller rather than swallowing it — the caller decides
@@ -97,6 +97,30 @@ impl Session {
     }
 }
 
+/// Write `text` readable by its owner only. The state is whatever ticket or message was being
+/// tried out, which is nobody else's business on a shared machine.
+#[cfg(unix)]
+fn write_private(path: &Path, text: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
+    // `mode` only applies to a file this call creates; one saved by an older version keeps its
+    // permissions unless they are tightened here, before anything new is written into it.
+    file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    file.write_all(text.as_bytes())
+}
+
+#[cfg(not(unix))]
+fn write_private(path: &Path, text: &str) -> std::io::Result<()> {
+    std::fs::write(path, text)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -124,6 +148,23 @@ mod tests {
 
         sample().save_to(&path).unwrap();
 
+        assert_eq!(Session::load_from(&path), sample());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_saved_session_is_readable_by_its_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("last-session.json");
+        // As an older version left it.
+        std::fs::write(&path, "{}").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        sample().save_to(&path).unwrap();
+
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "{mode:o}");
         assert_eq!(Session::load_from(&path), sample());
     }
 
