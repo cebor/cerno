@@ -50,6 +50,19 @@ pub enum Error {
         response: ErrorResponse,
     },
 
+    /// A structured failure with a code this client does not know, from a newer service.
+    ///
+    /// Kept apart from [`Error::Unexpected`] because it is not a proxy getting in the way: the
+    /// service answered, in its own shape, and the code and message are worth reading. Updating
+    /// the client turns it into an [`Error::Api`].
+    #[error("cerno returned {status} ({code}): {message}")]
+    UnknownCode {
+        status: u16,
+        code: String,
+        message: String,
+        question_id: Option<String>,
+    },
+
     /// A non-2xx response that was not shaped like an `ErrorResponse` — a proxy or a gateway
     /// between client and service, most likely.
     #[error("cerno returned {status}: {body}")]
@@ -139,11 +152,28 @@ async fn decode<T: serde::de::DeserializeOwned>(response: reqwest::Response) -> 
         });
     }
 
-    match serde_json::from_str::<ErrorResponse>(&body) {
-        Ok(response) => Err(Error::Api {
+    if let Ok(response) = serde_json::from_str::<ErrorResponse>(&body) {
+        return Err(Error::Api {
             status: status.as_u16(),
             code: response.code,
             response,
+        });
+    }
+
+    // Our shape, but a code added after this client was built.
+    #[derive(serde::Deserialize)]
+    struct Unrecognised {
+        code: String,
+        message: String,
+        #[serde(default)]
+        question_id: Option<String>,
+    }
+    match serde_json::from_str::<Unrecognised>(&body) {
+        Ok(error) => Err(Error::UnknownCode {
+            status: status.as_u16(),
+            code: error.code,
+            message: error.message,
+            question_id: error.question_id,
         }),
         // Not our error shape, so do not pretend to know what went wrong.
         Err(_) => Err(Error::Unexpected {

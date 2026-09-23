@@ -67,6 +67,17 @@ impl Failure {
                 code: Some(*code),
                 question_id: response.question_id.clone(),
             },
+            // A newer service's code: this build cannot name it, but the message and the
+            // question it blames are as good as any other.
+            Error::UnknownCode {
+                message,
+                question_id,
+                ..
+            } => Self {
+                message: message.clone(),
+                code: None,
+                question_id: question_id.clone(),
+            },
             other => Self {
                 message: other.to_string(),
                 code: None,

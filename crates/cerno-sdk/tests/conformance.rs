@@ -233,6 +233,40 @@ async fn a_non_cerno_error_body_is_reported_as_unexpected() {
     );
 }
 
+/// A newer service can send a code this client has never heard of. That is still the service
+/// speaking, not a proxy, and its code and message must survive.
+#[tokio::test]
+async fn an_error_code_newer_than_the_client_keeps_its_code_and_message() {
+    let mut server = mockito::Server::new_async().await;
+    let _mock = server
+        .mock("POST", "/v1/systemone")
+        .with_status(429)
+        .with_body(r#"{"code":"quota_exceeded","message":"try again in 3s","question_id":"q"}"#)
+        .create_async()
+        .await;
+
+    let err = client(&server.url())
+        .systemone("state")
+        .noul("q", "Urgent?")
+        .send()
+        .await
+        .unwrap_err();
+
+    let Error::UnknownCode {
+        status,
+        code,
+        message,
+        question_id,
+    } = err
+    else {
+        panic!("{err:?}")
+    };
+    assert_eq!(status, 429);
+    assert_eq!(code, "quota_exceeded");
+    assert_eq!(message, "try again in 3s");
+    assert_eq!(question_id.as_deref(), Some("q"));
+}
+
 /// Asking for the wrong type is a programming mistake and must say so precisely.
 #[tokio::test]
 async fn reading_an_answer_as_the_wrong_type_names_both_types() {
