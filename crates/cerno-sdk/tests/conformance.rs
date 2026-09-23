@@ -144,6 +144,13 @@ async fn response_cases_read_back_the_expected_values() {
             if let Some(truncated) = want["truncated"].as_bool() {
                 assert_eq!(answers.truncated(id).unwrap(), truncated, "case {name:?}");
             }
+            if let Some(mass) = want["label_mass"].as_f64() {
+                assert_eq!(
+                    answers.label_mass(id).unwrap(),
+                    mass,
+                    "case {name:?} id {id}"
+                );
+            }
             if let Some(labels) = want["truncated_labels"].as_array() {
                 let labels: Vec<&str> = labels.iter().map(|l| l.as_str().unwrap()).collect();
                 assert_eq!(

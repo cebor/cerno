@@ -118,6 +118,13 @@ impl Answers {
         Ok(self.get(id)?.truncated())
     }
 
+    /// How much of the model's first-token probability fell on the offered labels for `id`, in
+    /// `0.0..=1.0`. The probabilities are normalised over the labels alone, so this is what tells
+    /// an answer the model gave from one read off letters it was not going to write.
+    pub fn label_mass(&self, id: &str) -> Result<f64, Error> {
+        Ok(self.get(id)?.label_mass())
+    }
+
     /// The labels for `id` whose logprob is an upper bound rather than an observation. Empty
     /// unless [`Answers::truncated`].
     pub fn truncated_labels(&self, id: &str) -> Result<&[String], Error> {

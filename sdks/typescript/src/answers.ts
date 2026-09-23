@@ -92,7 +92,15 @@ export class Answers {
 
   /** The labels for `id` whose logprob is an upper bound rather than an observation. */
   truncatedLabels(id: string): string[] {
-    return this.get(id).truncated_labels ?? [];
+    return this.get(id).truncated_labels;
+  }
+
+  /**
+   * How much of the model's first-token probability fell on the offered labels for `id`, in
+   * 0..=1. Well below 1, the answer was read off letters the model was not going to write.
+   */
+  labelMass(id: string): number {
+    return this.get(id).label_mass;
   }
 
   /** The response exactly as the service sent it. */

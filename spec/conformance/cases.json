@@ -1,5 +1,5 @@
 {
-  "note": "The shared truth for every cerno SDK. `requests` pin the JSON a client must produce from a given builder call; `responses` pin the values a client must read back out; `errors` pin the failure mapping. The first response case deliberately omits `truncated_labels`, as a server predating it would; a client must read that as an empty list. Each SDK runs all three against a mock server. The Rust test suite additionally checks every body here against the server's own types, so a case can never describe something the service would reject.",
+  "note": "The shared truth for every cerno SDK. `requests` pin the JSON a client must produce from a given builder call; `responses` pin the values a client must read back out; `errors` pin the failure mapping. The third response case is an answer read off letters the model was not going to write: its `label_mass` is what gives that away. Each SDK runs all three against a mock server. The Rust test suite additionally checks every body here against the server's own types, so a case can never describe something the service would reject.",
   "version": 1,
 
   "requests": [
@@ -59,7 +59,9 @@
             "type": "noul",
             "noul": 0.9911299643691728,
             "raw_logprobs": {"A": -0.010017034211529765, "B": -4.726183891296387},
-            "truncated": false
+            "truncated": false,
+            "truncated_labels": [],
+            "label_mass": 0.9988931873375879
           },
           "team": {
             "type": "choice",
@@ -72,7 +74,9 @@
               {"option": "HR", "probability": 0.0034803339042010855}
             ],
             "raw_logprobs": {"A": -4.542220592498779, "B": -0.015145503443622971, "C": -5.959764003753662},
-            "truncated": false
+            "truncated": false,
+            "truncated_labels": [],
+            "label_mass": 0.9981988653074099
           },
           "sev": {
             "type": "score",
@@ -88,7 +92,9 @@
               {"level": 5, "legend": "kritisch", "probability": 0.9189550838883952}
             ],
             "raw_logprobs": {"A": -5.253698825836182, "B": -5.3350090980529785, "C": -4.383739948272705, "D": -2.840393543243408, "E": -0.0859457403421402},
-            "truncated": false
+            "truncated": false,
+            "truncated_labels": [],
+            "label_mass": 0.9985733111537043
           }
         },
         "model": "gemma4:e2b-it-qat",
@@ -99,9 +105,9 @@
         "model": "gemma4:e2b-it-qat",
         "usage": {"input_tokens": 329, "questions": 3},
         "answers": {
-          "urgent": {"type": "noul", "noul": 0.9911299643691728, "truncated": false, "truncated_labels": []},
-          "team": {"type": "choice", "choice": "Facility", "index": 1, "truncated": false},
-          "sev": {"type": "score", "score": 5, "legend": "kritisch", "truncated": false}
+          "urgent": {"type": "noul", "noul": 0.9911299643691728, "truncated": false, "truncated_labels": [], "label_mass": 0.9988931873375879},
+          "team": {"type": "choice", "choice": "Facility", "index": 1, "truncated": false, "label_mass": 0.9981988653074099},
+          "sev": {"type": "score", "score": 5, "legend": "kritisch", "truncated": false, "label_mass": 0.9985733111537043}
         }
       }
     },
@@ -114,7 +120,8 @@
             "noul": 0.0000001,
             "raw_logprobs": {"A": -15.5, "B": -0.001},
             "truncated": true,
-            "truncated_labels": ["A"]
+            "truncated_labels": ["A"],
+            "label_mass": 0.999000499833375
           }
         },
         "model": "gemma4:e2b-it-qat",
@@ -123,7 +130,34 @@
       },
       "expect": {
         "model": "gemma4:e2b-it-qat",
-        "answers": {"q": {"type": "noul", "truncated": true, "truncated_labels": ["A"]}}
+        "answers": {"q": {"type": "noul", "truncated": true, "truncated_labels": ["A"], "label_mass": 0.999000499833375}}
+      }
+    },
+    {
+      "name": "answer read off letters the model was not going to write",
+      "body": {
+        "answers": {
+          "team": {
+            "type": "choice",
+            "choice": "IT",
+            "index": 0,
+            "confidence": 0.8700207253336951,
+            "probabilities": [
+              {"option": "IT", "probability": 0.9820137900379085},
+              {"option": "Facility", "probability": 0.01798620996209155}
+            ],
+            "raw_logprobs": {"A": -4.0, "B": -8.0},
+            "truncated": false,
+            "truncated_labels": [],
+            "label_mass": 0.01865110151663669
+          }
+        },
+        "model": "gemma4:e2b-it-qat",
+        "usage": {"input_tokens": 61, "questions": 1},
+        "timing_ms": {"total": 41}
+      },
+      "expect": {
+        "answers": {"team": {"type": "choice", "choice": "IT", "index": 0, "truncated": false, "label_mass": 0.01865110151663669}}
       }
     }
   ],

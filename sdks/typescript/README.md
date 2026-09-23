@@ -44,6 +44,7 @@ A choice whose options speak for themselves takes two arguments:
 Every answer carries the evidence it came from:
 
 ```ts
+answers.labelMass("team");            // 0.999 — share of the model's probability on the letters
 answers.truncated("team");            // a label fell outside the host's reporting window
 answers.truncatedLabels("team");      // ["C"] — which ones; their raw_logprobs entry is a bound
 answers.get("team").raw_logprobs;     // { A: -4.54, B: -0.02, ... }
@@ -53,6 +54,12 @@ answers.get("team").probabilities;    // per option, in request order
 `truncated` is worth checking when you act on a probability rather than on the winner: it means
 at least one option ranked below everything the host reported, so its probability is an upper
 bound, not an observation.
+
+`label_mass` is worth checking before trusting any answer at all: it is how much of the model's
+own probability fell on the offered letters. The probabilities are normalised over the letters
+alone, so they look just as decisive when the model was about to write something else and the
+letters were far down its ranking. Well below 1, the answer was read off tokens the model was
+not going to write.
 
 To flatten an overconfident model, scale the logits before they are normalised:
 

@@ -36,6 +36,18 @@ fn truncated_answer() -> Answers {
     Answers::from(response)
 }
 
+/// The conformance case whose letters were far behind what the model wanted to write.
+fn answer_read_off_the_tail() -> Answers {
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/conformance/cases.json");
+    let cases: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+
+    let response: SystemOneResponse =
+        serde_json::from_value(cases["responses"][2]["body"].clone()).unwrap();
+    Answers::from(response)
+}
+
 fn app_with_answers() -> App {
     let mut app = App::new(
         Session {
@@ -162,6 +174,18 @@ fn a_truncated_answer_is_called_out() {
 
     assert!(contains(&lines, "truncated"), "{lines:#?}");
     assert!(contains(&lines, "upper bound"));
+}
+
+/// The bars look just as decisive either way; the warning is the only thing that differs.
+#[test]
+fn an_answer_with_little_mass_on_the_letters_is_called_out() {
+    let mut app = app_with_answers();
+    app.answers = Some(answer_read_off_the_tail());
+
+    let lines = screen(&app);
+
+    assert!(contains(&lines, "only 1.9%"), "{lines:#?}");
+    assert!(!contains(&screen(&app_with_answers()), "only "));
 }
 
 #[test]

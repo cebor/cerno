@@ -59,10 +59,15 @@ interface AnswerBase {
   truncated: boolean;
   /**
    * The labels whose `raw_logprobs` entry is an upper bound rather than an observation. Empty
-   * unless `truncated`. A server predating this field omits it; `Answers.truncatedLabels` reads
-   * that as empty.
+   * unless `truncated`.
    */
-  truncated_labels?: string[];
+  truncated_labels: string[];
+  /**
+   * How much of the model's first-token probability fell on the offered labels, in 0..=1. The
+   * probabilities are normalised over the labels alone, so they look just as decisive when the
+   * model was about to write something else; a low `label_mass` is what gives that away.
+   */
+  label_mass: number;
 }
 
 export interface NoulAnswer extends AnswerBase {

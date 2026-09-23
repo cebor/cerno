@@ -14,6 +14,11 @@ use ratatui::widgets::{Block, Clear, List, ListItem, Paragraph, Wrap};
 const EIGHTHS: [char; 8] = ['▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'];
 const EMPTY: char = '░';
 
+/// Below this share of the model's probability on the offered letters, an answer is flagged. A
+/// display threshold only: the service reports `label_mass` and leaves the judgement to callers.
+/// Half is where the letters stop being what the model most wanted to write.
+const LOW_LABEL_MASS: f64 = 0.5;
+
 /// A horizontal bar `width` cells wide showing `probability`.
 ///
 /// Sub-cell resolution matters here: a choice between twenty options routinely puts one percent
@@ -344,15 +349,22 @@ fn answer_lines(
     // A truncated answer is an upper bound, not an observation, and saying so is the whole
     // reason the flag travels back with every answer.
     if answer.truncated() {
-        let text = if bounded.is_empty() {
-            "  ⚠ truncated — a label fell outside the host's window; its value is an upper bound"
-                .to_string()
-        } else {
-            format!(
-                "  ⚠ truncated: {} fell outside the host's window; ≤ marks an upper bound",
-                bounded.join(", ")
-            )
-        };
+        let text = format!(
+            "  ⚠ truncated: {} fell outside the host's window; ≤ marks an upper bound",
+            bounded.join(", ")
+        );
+        lines.push(Line::from(Span::styled(text, tint(base, Color::Yellow))));
+    }
+
+    // The bars are normalised over the letters, so they look as decisive when the model was
+    // about to write something else and the letters were far behind. Only the mass says so.
+    let mass = answer.label_mass();
+    if mass < LOW_LABEL_MASS {
+        let text = format!(
+            "  ⚠ only {:.1}% of the model's probability was on the letters; it was not answering \
+             with one",
+            mass * 100.0
+        );
         lines.push(Line::from(Span::styled(text, tint(base, Color::Yellow))));
     }
 

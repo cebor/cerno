@@ -321,6 +321,67 @@ async fn token_variants_of_one_label_are_folded_together() {
     assert!((0.45..0.55).contains(&noul), "got {noul}");
 }
 
+/// The probabilities are normalised over the labels alone, so they cannot tell a model answering
+/// with a letter from one about to write `**` with the letters far behind. `label_mass` can.
+#[tokio::test]
+async fn label_mass_tells_a_letter_answer_from_one_read_off_the_tail() {
+    let (letter, _) = engine(&[("B", -0.1), ("A", -2.5)]);
+    let (answered, _) = letter
+        .answer(
+            "Ticket.",
+            &noul("q", "Urgent?"),
+            "m",
+            Calibration::default(),
+        )
+        .await
+        .unwrap();
+
+    let (prose, _) = engine(&[("**", -0.01), ("A", -8.0), ("B", -9.0)]);
+    let (read_off, _) = prose
+        .answer(
+            "Ticket.",
+            &noul("q", "Urgent?"),
+            "m",
+            Calibration::default(),
+        )
+        .await
+        .unwrap();
+
+    let expected = (-0.1f64).exp() + (-2.5f64).exp();
+    assert!((answered.label_mass() - expected).abs() < 1e-12);
+    assert!(read_off.label_mass() < 0.001, "{}", read_off.label_mass());
+    // Normalised over the labels, the second answer is as decisive-looking as the first.
+    let Answer::Noul { noul, .. } = read_off else {
+        panic!()
+    };
+    assert!(noul > 0.7, "got {noul}");
+}
+
+/// A floor is an upper bound, not an observation, so it must not count toward the mass; every
+/// spelling of an observed label does.
+#[tokio::test]
+async fn label_mass_counts_folded_variants_and_leaves_out_floors() {
+    let (engine, _) = engine(&[("B", -0.7), (" B", -1.4), ("**", -15.5)]);
+
+    let (answer, _) = engine
+        .answer(
+            "Ticket.",
+            &noul("q", "Urgent?"),
+            "m",
+            Calibration::default(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(answer.truncated_labels(), ["A".to_string()]);
+    let expected = (-0.7f64).exp() + (-1.4f64).exp();
+    assert!(
+        (answer.label_mass() - expected).abs() < 1e-12,
+        "{}",
+        answer.label_mass()
+    );
+}
+
 /// A model that answers in prose instead of a letter is not usable, and the error says so
 /// concretely enough to act on.
 #[tokio::test]

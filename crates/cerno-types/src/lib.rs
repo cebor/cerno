@@ -202,8 +202,13 @@ pub struct SystemOneResponse {
 ///
 /// A label in `truncated_labels` fell outside the host's reporting window, so its entry in
 /// `raw_logprobs` is the weakest reported logprob: an upper bound, not an observation.
-/// `truncated` is true exactly when that list is not empty. Servers predating the list omit
-/// it, which reads as empty.
+/// `truncated` is true exactly when that list is not empty.
+///
+/// `label_mass` is how much of the model's first-token probability fell on the offered labels,
+/// in `0.0..=1.0`, counting only labels the host reported. The probabilities are normalised over
+/// the labels alone, so they look just as decisive when the model was about to write something
+/// else entirely and the letters were an afterthought at `-8`. Near 1 the model answered with a
+/// letter; well below it, the answer was read off tokens the model was not going to produce.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "schema", derive(ToSchema))]
@@ -213,8 +218,8 @@ pub enum Answer {
         noul: f64,
         raw_logprobs: BTreeMap<String, f64>,
         truncated: bool,
-        #[serde(default)]
         truncated_labels: Vec<String>,
+        label_mass: f64,
     },
     Choice {
         /// The winning option, verbatim as it was supplied.
@@ -226,8 +231,8 @@ pub enum Answer {
         probabilities: Vec<OptionProbability>,
         raw_logprobs: BTreeMap<String, f64>,
         truncated: bool,
-        #[serde(default)]
         truncated_labels: Vec<String>,
+        label_mass: f64,
     },
     Score {
         /// The most likely level, 1-based.
@@ -240,8 +245,8 @@ pub enum Answer {
         probabilities: Vec<LevelProbability>,
         raw_logprobs: BTreeMap<String, f64>,
         truncated: bool,
-        #[serde(default)]
         truncated_labels: Vec<String>,
+        label_mass: f64,
     },
 }
 
@@ -269,6 +274,16 @@ impl Answer {
             | Self::Score {
                 truncated_labels, ..
             } => truncated_labels,
+        }
+    }
+
+    /// How much of the model's first-token probability fell on the offered labels. See
+    /// [`Answer`].
+    pub fn label_mass(&self) -> f64 {
+        match self {
+            Self::Noul { label_mass, .. }
+            | Self::Choice { label_mass, .. }
+            | Self::Score { label_mass, .. } => *label_mass,
         }
     }
 
@@ -448,19 +463,5 @@ mod tests {
         let back = serde_json::to_value(question(wire.clone()).unwrap()).unwrap();
 
         assert_eq!(back, wire);
-    }
-
-    /// A server that predates `truncated_labels` omits it; that must read as empty.
-    #[test]
-    fn a_missing_truncated_labels_reads_as_empty() {
-        let answer: Answer = serde_json::from_value(json!({
-            "type": "noul",
-            "noul": 0.9,
-            "raw_logprobs": {"A": -0.1, "B": -2.4},
-            "truncated": false
-        }))
-        .unwrap();
-
-        assert!(answer.truncated_labels().is_empty());
     }
 }

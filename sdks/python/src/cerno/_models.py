@@ -82,12 +82,18 @@ class Answer:
     ``raw_logprobs`` and ``truncated`` travel with every answer so a caller can redo the
     normalisation themselves: calibration is a convenience, never a place information is lost.
     ``truncated_labels`` names the labels whose logprob is an upper bound rather than an
-    observation; a server predating it omits it, which reads as empty.
+    observation.
+
+    ``label_mass`` is how much of the model's first-token probability fell on the offered labels.
+    The probabilities are normalised over the labels alone, so they look just as decisive when
+    the model was about to write something else; a low ``label_mass`` is what gives that away.
     """
 
     type: Literal["noul", "choice", "score"]
     raw_logprobs: Mapping[str, float]
     truncated: bool
+    truncated_labels: tuple[str, ...]
+    label_mass: float
     confidence: float | None = None
     noul: float | None = None
     choice: str | None = None
@@ -96,7 +102,6 @@ class Answer:
     expected_score: float | None = None
     legend: str | None = None
     probabilities: list[OptionProbability] | list[LevelProbability] = field(default_factory=list)
-    truncated_labels: tuple[str, ...] = ()
 
     @classmethod
     def parse(cls, data: Mapping[str, Any]) -> "Answer":
@@ -120,6 +125,8 @@ class Answer:
             confidence=data.get("confidence"),
             raw_logprobs=dict(data.get("raw_logprobs", {})),
             truncated=data["truncated"],
+            truncated_labels=tuple(data["truncated_labels"]),
+            label_mass=data["label_mass"],
             noul=data.get("noul"),
             choice=data.get("choice"),
             index=data.get("index"),
@@ -127,7 +134,6 @@ class Answer:
             expected_score=data.get("expected_score"),
             legend=data.get("legend"),
             probabilities=probabilities,
-            truncated_labels=tuple(data.get("truncated_labels", ())),
         )
 
 
@@ -216,6 +222,11 @@ class Answers:
         """Whether some label fell outside the host's reporting window, making its probability
         an upper bound rather than an observation."""
         return self[question_id].truncated
+
+    def label_mass(self, question_id: str) -> float:
+        """How much of the model's first-token probability fell on the offered labels, in 0..=1.
+        Well below 1, the answer was read off letters the model was not going to write."""
+        return self[question_id].label_mass
 
     def truncated_labels(self, question_id: str) -> tuple[str, ...]:
         """The labels whose logprob is an upper bound rather than an observation."""

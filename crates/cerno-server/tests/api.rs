@@ -182,6 +182,13 @@ async fn answers_carry_raw_logprobs_and_the_truncation_flag() {
     assert_eq!(answer["raw_logprobs"]["A"], -2.4);
     assert_eq!(answer["raw_logprobs"]["B"], -0.1);
     assert_eq!(answer["truncated"], false);
+    assert_eq!(answer["truncated_labels"], json!([]));
+    // e^-0.1 + e^-2.4 of the model's own probability was on the two letters.
+    let mass = answer["label_mass"].as_f64().unwrap();
+    assert!(
+        (mass - ((-0.1f64).exp() + (-2.4f64).exp())).abs() < 1e-12,
+        "{mass}"
+    );
 }
 
 /// The mock reports only A..E, so a 6-option choice leaves F outside the window.

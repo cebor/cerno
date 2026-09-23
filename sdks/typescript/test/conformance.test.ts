@@ -94,6 +94,9 @@ test("response cases read back the expected values", async () => {
       if (want.truncated !== undefined) {
         assert.equal(answers.truncated(id), want.truncated, `${testCase.name}/${id}`);
       }
+      if (want.label_mass !== undefined) {
+        assert.equal(answers.labelMass(id), want.label_mass, `${testCase.name}/${id}`);
+      }
       if (want.truncated_labels !== undefined) {
         assert.deepEqual(
           answers.truncatedLabels(id),

@@ -87,6 +87,16 @@ If *no* label matched, that is `NoLabelMatched` and a 502 — the request was fi
 not following the instruction, and the error names the tokens that came back instead so an
 operator can see what they are dealing with.
 
+## Normalising over the labels hides how much they mattered
+
+The probabilities are a softmax over the labels only. A model about to write `**` at `-0.01`
+with the letters at `-8` gets an answer that looks as decisive as a real one. `label_mass` is
+the sum of the model's own probability on the *observed* labels — floors are bounds and do not
+count — so every answer says how much of the model was actually behind it. The service reports
+it and never refuses on it; where the line is depends on what the caller does with the answer.
+The TUI flags answers below `LOW_LABEL_MASS` (0.5), and the benchmark's fidelity asks the
+stricter question of whether the top token was a label at all.
+
 ## Confidence is one definition for choice and score, and a noul has none
 
 `1 - H(p)/log(n)`, in `math::confidence`. Normalising by `log(n)` puts a two-option choice and

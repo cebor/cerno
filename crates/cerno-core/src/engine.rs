@@ -89,6 +89,8 @@ struct Tally {
     confidence: f64,
     /// The labels that fell outside the reported window and were given the floor.
     truncated_labels: Vec<String>,
+    /// The probability the model itself put on the observed labels, before any normalising.
+    label_mass: f64,
 }
 
 pub struct Engine {
@@ -277,6 +279,7 @@ impl Engine {
                 raw_logprobs: tally.logprobs,
                 truncated: !tally.truncated_labels.is_empty(),
                 truncated_labels: tally.truncated_labels,
+                label_mass: tally.label_mass,
             },
 
             QuestionKind::Choice(spec) => {
@@ -297,6 +300,7 @@ impl Engine {
                     raw_logprobs: tally.logprobs,
                     truncated: !tally.truncated_labels.is_empty(),
                     truncated_labels: tally.truncated_labels,
+                    label_mass: tally.label_mass,
                 }
             }
 
@@ -321,6 +325,7 @@ impl Engine {
                     raw_logprobs: tally.logprobs,
                     truncated: !tally.truncated_labels.is_empty(),
                     truncated_labels: tally.truncated_labels,
+                    label_mass: tally.label_mass,
                 }
             }
         };
@@ -395,6 +400,8 @@ fn read_labels(
     let mut logprobs = Vec::with_capacity(label_set.len());
     let mut observed_any = false;
     let mut truncated_labels = Vec::new();
+    // Observed labels only: a floor is a bound, and adding bounds would overstate the mass.
+    let mut label_mass = 0.0;
 
     for label in label_set {
         // Every token spelling this label counts toward it; see `math::logsumexp`.
@@ -411,7 +418,9 @@ fn read_labels(
             logprobs.push(distribution.floor);
         } else {
             observed_any = true;
-            logprobs.push(math::logsumexp(&variants));
+            let logprob = math::logsumexp(&variants);
+            label_mass += logprob.exp();
+            logprobs.push(logprob);
         }
     }
 
@@ -440,5 +449,7 @@ fn read_labels(
         probabilities,
         confidence,
         truncated_labels,
+        // Reported logprobs over-sum a little from rounding; the share cannot pass 1.
+        label_mass: label_mass.min(1.0),
     })
 }

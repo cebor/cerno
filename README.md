@@ -27,18 +27,21 @@ curl localhost:3000/v1/systemone -H 'content-type: application/json' -d '{
 
 ```json
 {"answers": {
-   "urgent": {"type": "noul",   "noul": 0.9834, "truncated": false},
+   "urgent": {"type": "noul",   "noul": 0.9834, "label_mass": 0.998, "truncated": false},
    "team":   {"type": "choice", "choice": "Facility", "index": 1,
-              "confidence": 0.978, "truncated": false},
+              "confidence": 0.978, "label_mass": 0.999, "truncated": false},
    "sev":    {"type": "score",  "score": 5, "expected_score": 4.80, "legend": "kritisch",
-              "confidence": 0.692, "truncated": false}},
+              "confidence": 0.692, "label_mass": 0.998, "truncated": false}},
  "model": "gemma4:e2b-it-qat",
  "usage": {"input_tokens": 297, "questions": 3},
  "timing_ms": {"total": 96}}
 ```
 
 Trimmed: every answer also carries `raw_logprobs` and `truncated_labels`, and a choice or score
-its `probabilities`.
+its `probabilities`. `label_mass` is how much of the model's own probability fell on the offered
+letters: near 1 here, because the model answered with a letter. The probabilities are normalised
+over the letters alone, so a low `label_mass` is the only sign that it was about to write
+something else and the answer was read off letters far down its ranking.
 Three questions, 96 ms, on a 4 GB model.
 
 ## How it works
