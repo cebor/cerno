@@ -185,6 +185,9 @@ documentation; those commits do not appear in the changelog at all.
 | `removed` | gone |
 | `security` | a vulnerability fix |
 
+A vulnerability is reported privately first, as [SECURITY.md](SECURITY.md) describes; the fix
+lands once there is a release to put it in.
+
 One value per commit. If a commit seems to need two, it is usually two commits. The subject
 line becomes the changelog entry, which is one more reason to write it as a sentence a user
 can understand.
