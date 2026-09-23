@@ -168,8 +168,19 @@ const MAX_ERROR_BODY: usize = 300;
 
 impl HostError {
     /// A non-success status from the host, with its body logged in full and kept short.
+    ///
+    /// An authentication failure keeps none of it. OpenAI answers a wrong key with "Incorrect
+    /// API key provided: sk-…abcd", and part of the operator's key is not the caller's business
+    /// however short the excerpt.
     fn status(status: u16, body: String) -> Self {
         tracing::warn!(status, body = %body, "host answered with an error");
+
+        if matches!(status, 401 | 403) {
+            return Self::Status {
+                status,
+                body: "the host refused cerno's credentials; the service log has its answer".into(),
+            };
+        }
 
         let body = match body.char_indices().nth(MAX_ERROR_BODY) {
             Some((cut, _)) => format!("{}…", &body[..cut]),
@@ -252,6 +263,22 @@ mod tests {
             "300 characters and an ellipsis"
         );
         assert!(body.ends_with('…'));
+    }
+
+    #[test]
+    fn an_authentication_failure_passes_on_none_of_the_body() {
+        for status in [401, 403] {
+            let HostError::Status { body, .. } = HostError::status(
+                status,
+                r#"{"error":{"message":"Incorrect API key provided: sk-proj-********abcd."}}"#
+                    .into(),
+            ) else {
+                panic!()
+            };
+
+            assert!(!body.contains("sk-"), "{status}: {body}");
+            assert!(!body.contains("abcd"), "{status}: {body}");
+        }
     }
 
     #[test]
