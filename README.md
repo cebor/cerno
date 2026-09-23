@@ -229,8 +229,8 @@ crates/
   cerno-sdk      Rust client
   cerno-tui      terminal front end, on cerno-sdk
   cerno-bench    model benchmark
-sdks/python      uv package `cerno`
-sdks/typescript  npm package `@cerno/sdk`
+sdks/python      uv package `cerno-sdk`, imported as `cerno`
+sdks/typescript  npm package `cerno-sdk`
 spec/            openapi.json + conformance cases
 ```
 

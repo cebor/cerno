@@ -9,7 +9,7 @@ Three kinds of question about a piece of text, answered by a locally hosted mode
 Each question is one forward pass, so answers come back in tens of milliseconds.
 
 ```bash
-uv add cerno
+uv add cerno-sdk
 ```
 
 ```python

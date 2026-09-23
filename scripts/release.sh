@@ -49,7 +49,7 @@ versions() {
     awk '/^name = "cerno-/ { name = $3; getline; gsub(/"/, "", $3); print "Cargo.lock:" name, $3 }' Cargo.lock
     echo "pyproject.toml $($sed -n '0,/^version = / s/^version = "\(.*\)"/\1/p' sdks/python/pyproject.toml)"
     echo "__init__.py $($sed -n 's/^__version__ = "\(.*\)"/\1/p' sdks/python/src/cerno/__init__.py)"
-    awk '/^name = "cerno"$/ { getline; gsub(/"/, "", $3); print "uv.lock", $3 }' sdks/python/uv.lock
+    awk '/^name = "cerno-sdk"$/ { getline; gsub(/"/, "", $3); print "uv.lock", $3 }' sdks/python/uv.lock
     node -e '
         const pkg = require("./sdks/typescript/package.json");
         const lock = require("./sdks/typescript/package-lock.json");

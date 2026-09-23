@@ -1,4 +1,4 @@
-# @cerno/sdk
+# cerno-sdk
 
 Three kinds of question about a piece of text, answered by a locally hosted model:
 
@@ -9,11 +9,11 @@ Three kinds of question about a piece of text, answered by a locally hosted mode
 Each question is one forward pass, so answers come back in tens of milliseconds.
 
 ```bash
-npm install @cerno/sdk
+npm install cerno-sdk
 ```
 
 ```ts
-import { Client } from "@cerno/sdk";
+import { Client } from "cerno-sdk";
 
 const client = new Client("http://localhost:3000");
 
@@ -74,7 +74,7 @@ if (answer.type === "choice") {
 ## Errors
 
 ```ts
-import { ApiError } from "@cerno/sdk";
+import { ApiError } from "cerno-sdk";
 
 try {
   await client.systemone(text).choice("team", "Which?", options).send();

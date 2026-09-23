@@ -1,5 +1,5 @@
 {
-  "name": "@cerno/sdk",
+  "name": "cerno-sdk",
   "version": "0.1.0",
   "description": "TypeScript client for cerno — noul, choice and score against a locally hosted model",
   "license": "MIT",
