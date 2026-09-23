@@ -99,14 +99,18 @@ impl Client {
         decode(response).await
     }
 
-    /// Whether the service is up.
-    pub async fn health(&self) -> Result<bool, Error> {
-        let response = self
+    /// Whether the service is up. An unreachable or unresponsive service is simply not up, the
+    /// same answer the Python and TypeScript clients give.
+    pub async fn health(&self) -> bool {
+        match self
             .http
             .get(format!("{}/health", self.base_url))
             .send()
-            .await?;
-        Ok(response.status().is_success())
+            .await
+        {
+            Ok(response) => response.status().is_success(),
+            Err(_) => false,
+        }
     }
 
     pub(crate) async fn post_systemone(

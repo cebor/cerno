@@ -185,7 +185,7 @@ fn spawn_probe(client: Client) -> mpsc::UnboundedReceiver<Probe> {
     let (tx, rx) = mpsc::unbounded_channel();
 
     tokio::spawn(async move {
-        let healthy = client.health().await.unwrap_or(false);
+        let healthy = client.health().await;
 
         // Aliases are a convenience for the `m` key; a service without them is not a problem.
         let models = match client.models().await {

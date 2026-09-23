@@ -266,3 +266,10 @@ async fn a_response_can_be_wrapped_without_going_over_the_network() {
     assert_eq!(answers.score("sev").unwrap(), 5);
     assert_eq!(answers.into_inner().usage.questions, 3);
 }
+
+/// All three SDKs agree: a service that cannot be reached is not up, rather than an error.
+#[tokio::test]
+async fn health_is_false_when_the_service_cannot_be_reached() {
+    // Port 9 is discard; nothing listens there, so the connection is refused at once.
+    assert!(!client("http://127.0.0.1:9").health().await);
+}

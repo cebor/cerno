@@ -11,7 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| "http://127.0.0.1:3000".to_string());
     let client = Client::new(&url)?;
 
-    println!("health: {}", client.health().await?);
+    println!("health: {}", client.health().await);
 
     let answers = client
         .systemone("Ticket: Serverraum-Klima ausgefallen, 31 Grad und steigend.")
