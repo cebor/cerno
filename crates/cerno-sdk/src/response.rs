@@ -71,6 +71,14 @@ impl Answers {
         }
     }
 
+    /// The winning option's position in the request's options, 0-based.
+    pub fn index(&self, id: &str) -> Result<usize, Error> {
+        match self.get(id)? {
+            Answer::Choice { index, .. } => Ok(*index),
+            other => Err(self.wrong_type(id, "choice", other)),
+        }
+    }
+
     /// The winning level for `id`, 1-based.
     pub fn score(&self, id: &str) -> Result<u8, Error> {
         match self.get(id)? {

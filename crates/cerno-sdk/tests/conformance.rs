@@ -119,6 +119,13 @@ async fn response_cases_read_back_the_expected_values() {
                         want["choice"].as_str().unwrap(),
                         "case {name:?} id {id}"
                     );
+                    if let Some(index) = want["index"].as_u64() {
+                        assert_eq!(
+                            answers.index(id).unwrap() as u64,
+                            index,
+                            "case {name:?} id {id}"
+                        );
+                    }
                     assert!(answers.confidence(id).unwrap() > 0.0, "case {name:?}");
                 }
                 "score" => {
