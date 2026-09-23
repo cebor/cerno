@@ -13,6 +13,16 @@ set -euo pipefail
 
 die() { echo "release: $*" >&2; exit 1; }
 
+# The sed expressions below are GNU's (`0,/re/`, `-i` without a suffix). On macOS that is
+# usually installed as gsed.
+if sed --version >/dev/null 2>&1; then
+    sed=sed
+elif command -v gsed >/dev/null; then
+    sed=gsed
+else
+    die "needs GNU sed; on macOS: brew install gnu-sed"
+fi
+
 cd "$(git rev-parse --show-toplevel)"
 
 [[ $# -eq 1 ]] || die "usage: scripts/release.sh <major.minor.patch>"
@@ -35,10 +45,10 @@ fi
 
 # Every place the version is written down. They must agree before the release and after it.
 versions() {
-    echo "Cargo.toml $(sed -n '/^\[workspace\.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' Cargo.toml)"
+    echo "Cargo.toml $($sed -n '/^\[workspace\.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' Cargo.toml)"
     awk '/^name = "cerno-/ { name = $3; getline; gsub(/"/, "", $3); print "Cargo.lock:" name, $3 }' Cargo.lock
-    echo "pyproject.toml $(sed -n '0,/^version = / s/^version = "\(.*\)"/\1/p' sdks/python/pyproject.toml)"
-    echo "__init__.py $(sed -n 's/^__version__ = "\(.*\)"/\1/p' sdks/python/src/cerno/__init__.py)"
+    echo "pyproject.toml $($sed -n '0,/^version = / s/^version = "\(.*\)"/\1/p' sdks/python/pyproject.toml)"
+    echo "__init__.py $($sed -n 's/^__version__ = "\(.*\)"/\1/p' sdks/python/src/cerno/__init__.py)"
     awk '/^name = "cerno"$/ { getline; gsub(/"/, "", $3); print "uv.lock", $3 }' sdks/python/uv.lock
     node -e '
         const pkg = require("./sdks/typescript/package.json");
@@ -61,7 +71,7 @@ all_at() {
     fi
 }
 
-current=$(sed -n '/^\[workspace\.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' Cargo.toml)
+current=$($sed -n '/^\[workspace\.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' Cargo.toml)
 all_at "$current" || die "the versions above disagree; fix that by hand first"
 
 # --- The changelog section ----------------------------------------------------------------
@@ -78,7 +88,7 @@ section_of() {
 if grep -qF "## [$version]" CHANGELOG.md; then
     echo "Using the section for $version already in CHANGELOG.md."
 else
-    declare -A entries=()
+    entries=""
     range=${last_tag:+$last_tag..}HEAD
     while IFS=$'\x1f' read -r -d $'\x1e' hash subject kinds; do
         hash=${hash//$'\n'/}
@@ -89,13 +99,15 @@ else
             added | changed | deprecated | removed | fixed | security | performance) ;;
             *) die "$hash has an unknown Changelog trailer '$kinds' (see CONTRIBUTING.md)" ;;
         esac
-        entries[$kinds]+="- $subject ($hash)"$'\n'
+        entries+="$kinds - $subject ($hash)"$'\n'
     done < <(git log --reverse --format='%h%x1f%s%x1f%(trailers:key=Changelog,valueonly,separator=%x2C)%x1e' "$range")
 
     section="## [$version] - $(date +%F)"$'\n'
-    for kind in added changed deprecated removed fixed security performance; do
-        [[ -n ${entries[$kind]:-} ]] || continue
-        section+=$'\n'"### ${kind^}"$'\n\n'"${entries[$kind]}"
+    for kind in Added Changed Deprecated Removed Fixed Security Performance; do
+        lower=$(tr '[:upper:]' '[:lower:]' <<<"$kind")
+        lines=$(awk -v k="$lower" '$1 == k { sub(/^[^ ]+ /, ""); print }' <<<"$entries")
+        [[ -n $lines ]] || continue
+        section+=$'\n'"### $kind"$'\n\n'"$lines"$'\n'
     done
     [[ $section == *'### '* ]] || die "nothing user-visible since ${last_tag:-the first commit}"
 
@@ -116,11 +128,11 @@ fi
 
 if [[ $version != "$current" ]]; then
     trap 'echo "release: failed while bumping; git restore . puts everything back" >&2' ERR
-    sed -i "/^\[workspace\.package\]/,/^\[/ s/^version = \".*\"/version = \"$version\"/" Cargo.toml
-    sed -i "0,/^version = / s/^version = \".*\"/version = \"$version\"/" sdks/python/pyproject.toml
-    sed -i "s/^__version__ = \".*\"/__version__ = \"$version\"/" sdks/python/src/cerno/__init__.py
+    $sed -i "/^\[workspace\.package\]/,/^\[/ s/^version = \".*\"/version = \"$version\"/" Cargo.toml
+    $sed -i "0,/^version = / s/^version = \".*\"/version = \"$version\"/" sdks/python/pyproject.toml
+    $sed -i "s/^__version__ = \".*\"/__version__ = \"$version\"/" sdks/python/src/cerno/__init__.py
     # Not `npm version`: it reformats package.json, expanding every inline array and object.
-    sed -i "0,/^  \"version\": / s/^  \"version\": \".*\"/  \"version\": \"$version\"/" sdks/typescript/package.json
+    $sed -i "0,/^  \"version\": / s/^  \"version\": \".*\"/  \"version\": \"$version\"/" sdks/typescript/package.json
     node -e '
         const fs = require("fs");
         const path = "sdks/typescript/package-lock.json";
