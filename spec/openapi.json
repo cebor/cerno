@@ -37,7 +37,7 @@
           "cerno"
         ],
         "summary": "Ask several questions about one state.",
-        "description": "Every question is one forward pass, and they are independent, so they run concurrently up to\nthe configured limit rather than one after another.\n\nThe request succeeds or fails as a whole: if any question fails, the error names it and the\nanswers to the others are discarded.",
+        "description": "Every question is one forward pass, and they are independent, so they run concurrently up to\nthe configured limit rather than one after another.\n\nThe request succeeds or fails as a whole: if any question fails, the error names it and the\nanswers to the others are discarded. The same holds when the whole request, waiting for a\nfree slot included, outlasts the server's request timeout: that is a 504 `host_timeout`.",
         "operationId": "systemone",
         "requestBody": {
           "content": {

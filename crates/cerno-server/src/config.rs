@@ -19,6 +19,9 @@ const DEFAULT_MODEL: &str = "gemma4:e2b-it-qat";
 const DEFAULT_KEEP_ALIVE: &str = "5m";
 const DEFAULT_CONCURRENCY: usize = 4;
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
+/// Below the SDKs' 60 s, so a request that runs long comes back as the service's own
+/// `host_timeout` rather than as a client-side transport error that says nothing about why.
+const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 50;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
@@ -119,6 +122,9 @@ pub struct Config {
     pub max_concurrent_questions: usize,
     pub keep_alive: Option<String>,
     pub host_timeout: Duration,
+    /// How long one request may take in total, waiting for a free slot included. Without it, 32
+    /// questions at a concurrency of 4 could take eight host timeouts back to back.
+    pub request_timeout: Duration,
 }
 
 fn var<T>(name: &'static str, fallback: T) -> Result<T, ConfigError>
@@ -197,6 +203,10 @@ impl Config {
                 "CERNO_HOST_TIMEOUT_SECS",
                 DEFAULT_TIMEOUT_SECS,
             )?),
+            request_timeout: Duration::from_secs(var(
+                "CERNO_REQUEST_TIMEOUT_SECS",
+                DEFAULT_REQUEST_TIMEOUT_SECS,
+            )?),
         };
 
         config.validate()?;
@@ -232,6 +242,12 @@ impl Config {
         if self.host_timeout.is_zero() {
             return Err(ConfigError::Unusable {
                 setting: "CERNO_HOST_TIMEOUT_SECS",
+                reason: "must be above zero",
+            });
+        }
+        if self.request_timeout.is_zero() {
+            return Err(ConfigError::Unusable {
+                setting: "CERNO_REQUEST_TIMEOUT_SECS",
                 reason: "must be above zero",
             });
         }
@@ -328,6 +344,7 @@ mod tests {
             max_concurrent_questions: 4,
             keep_alive: Some("5m".into()),
             host_timeout: Duration::from_secs(30),
+            request_timeout: Duration::from_secs(50),
         }
     }
 
@@ -395,11 +412,14 @@ mod tests {
         empty_url.host_url = String::new();
         let mut no_time = config(false);
         no_time.host_timeout = Duration::ZERO;
+        let mut no_request_time = config(false);
+        no_request_time.request_timeout = Duration::ZERO;
 
         for (config, setting) in [
             (empty_model, "default_model"),
             (empty_url, "CERNO_HOST_URL"),
             (no_time, "CERNO_HOST_TIMEOUT_SECS"),
+            (no_request_time, "CERNO_REQUEST_TIMEOUT_SECS"),
         ] {
             assert!(
                 matches!(

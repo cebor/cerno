@@ -50,6 +50,7 @@ async fn main() -> ExitCode {
         max_options = engine.max_options(),
         max_top_logprobs = capabilities.max_top_logprobs,
         concurrency = config.max_concurrent_questions,
+        request_timeout_secs = config.request_timeout.as_secs(),
         "cerno starting"
     );
 

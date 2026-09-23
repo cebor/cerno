@@ -52,6 +52,7 @@ fn config(url: &str, strict: bool) -> Config {
         max_concurrent_questions: 4,
         keep_alive: Some("5m".into()),
         host_timeout: Duration::from_secs(5),
+        request_timeout: Duration::from_secs(10),
     }
 }
 
@@ -475,6 +476,52 @@ async fn a_host_that_never_answers_is_a_gateway_timeout() {
 
     assert_eq!(status, StatusCode::GATEWAY_TIMEOUT, "{body}");
     assert_eq!(body["code"], "host_timeout");
+}
+
+/// Each question has its host timeout, but a request of many questions queued behind a small
+/// concurrency limit could run for several of them back to back. The request timeout caps the
+/// whole thing, and the caller hears it from the service rather than from their own client.
+#[tokio::test]
+async fn a_request_that_outlasts_its_deadline_is_a_gateway_timeout() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let mut held = Vec::new();
+        while let Ok((stream, _)) = listener.accept().await {
+            held.push(stream);
+        }
+    });
+
+    let mut config = config(&format!("http://{addr}"), false);
+    config.host_timeout = Duration::from_secs(30);
+    config.request_timeout = Duration::from_millis(300);
+    config.max_concurrent_questions = 1;
+
+    let started = std::time::Instant::now();
+    let (status, body) = post(
+        app(config),
+        "/v1/systemone",
+        json!({"state": "s", "questions": [
+            {"id": "a", "noul": "Urgent?"},
+            {"id": "b", "noul": "Spam?"}
+        ]}),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::GATEWAY_TIMEOUT, "{body}");
+    assert_eq!(body["code"], "host_timeout");
+    assert!(
+        body["message"]
+            .as_str()
+            .unwrap()
+            .contains("CERNO_REQUEST_TIMEOUT_SECS"),
+        "{body}"
+    );
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "the host timeout decided, not the request's: {:?}",
+        started.elapsed()
+    );
 }
 
 #[tokio::test]

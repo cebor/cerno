@@ -9,6 +9,7 @@ use cerno_types::{
     SystemOneResponse, Timing, Usage,
 };
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 use std::time::Instant;
 use tokio::task::JoinSet;
 
@@ -46,7 +47,8 @@ pub async fn models(State(state): State<AppState>) -> Json<ModelsResponse> {
 /// the configured limit rather than one after another.
 ///
 /// The request succeeds or fails as a whole: if any question fails, the error names it and the
-/// answers to the others are discarded.
+/// answers to the others are discarded. The same holds when the whole request, waiting for a
+/// free slot included, outlasts the server's request timeout: that is a 504 `host_timeout`.
 #[utoipa::path(
     post,
     path = "/v1/systemone",
@@ -88,6 +90,10 @@ pub async fn systemone(
     // Validate every question before loading a model, so a bad request costs nothing.
     state.engine.validate(&request)?;
 
+    // Shared by every question's task rather than copied into each: a state can be large.
+    let state_text: Arc<str> = Arc::from(request.state.as_str());
+    let deadline = started + state.config.request_timeout;
+
     let mut tasks = JoinSet::new();
     // Which question each task answers. A task that panics comes back as a bare JoinError, so
     // the id has to be recoverable from the task alone.
@@ -95,7 +101,7 @@ pub async fn systemone(
     for question in request.questions.clone() {
         let engine = state.engine.clone();
         let semaphore = state.semaphore.clone();
-        let state_text = request.state.clone();
+        let state_text = state_text.clone();
         let model = model.clone();
 
         let id = question.id.clone();
@@ -114,7 +120,22 @@ pub async fn systemone(
     let mut answers: BTreeMap<String, Answer> = BTreeMap::new();
     let mut input_tokens: u32 = 0;
 
-    while let Some(joined) = tasks.join_next_with_id().await {
+    // Returning early drops the JoinSet, which aborts every question still running or queued,
+    // and gives their permits back.
+    let out_of_time = || ApiError {
+        code: ErrorCode::HostTimeout,
+        message: format!(
+            "the request did not finish within {:?}; ask fewer questions at once, or raise \
+             CERNO_REQUEST_TIMEOUT_SECS",
+            state.config.request_timeout
+        ),
+        question_id: None,
+    };
+
+    while let Some(joined) = tokio::time::timeout_at(deadline.into(), tasks.join_next_with_id())
+        .await
+        .map_err(|_| out_of_time())?
+    {
         let (task, result) = joined.map_err(|e| {
             let id = question_of.get(&e.id()).cloned();
             ApiError {

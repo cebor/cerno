@@ -227,7 +227,8 @@ Deployment knobs are environment variables; the model table is an optional TOML 
 | `CERNO_STRICT_MODELS` | `false` | Only allow configured models |
 | `CERNO_MAX_CONCURRENT_QUESTIONS` | `4` | In flight against the host at once |
 | `CERNO_KEEP_ALIVE` | `5m` | Empty means: do not send it |
-| `CERNO_HOST_TIMEOUT_SECS` | `30` | |
+| `CERNO_HOST_TIMEOUT_SECS` | `30` | Per question |
+| `CERNO_REQUEST_TIMEOUT_SECS` | `50` | Per request, waiting for a free slot included; below the SDKs' 60 s so the caller hears it from cerno |
 | `RUST_LOG` | `cerno_server=info,cerno_core=info` | |
 
 ## Hosts
