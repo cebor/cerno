@@ -87,10 +87,14 @@ If *no* label matched, that is `NoLabelMatched` and a 502 — the request was fi
 not following the instruction, and the error names the tokens that came back instead so an
 operator can see what they are dealing with.
 
-## Confidence is one definition for all three primitives
+## Confidence is one definition for choice and score, and a noul has none
 
-`1 - H(p)/log(n)`, in `math::confidence`. Normalising by `log(n)` puts a two-option noul and a
-ten-level score on the same `0..=1` scale.
+`1 - H(p)/log(n)`, in `math::confidence`. Normalising by `log(n)` puts a two-option choice and
+a ten-level score on the same `0..=1` scale.
+
+A noul carries no `confidence`, because JEV's does not: the probability is already the whole
+answer, and distance from 0.5 is the certainty. The SDKs' `confidence(id)` on a noul is a
+wrong-type error, like `choice(id)` on one, so nobody gets a silent `None`.
 
 It is a scale, not an invariant: at a fixed top probability the value *rises* with the label
 count (0.9 of ten scores 0.76, 0.9 of two scores 0.53). That is intended — narrowing ten

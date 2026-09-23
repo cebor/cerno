@@ -127,6 +127,12 @@ def test_reading_an_answer_as_the_wrong_type_names_both_types(cases):
     assert caught.value.expected == "choice"
     assert caught.value.actual == "noul"
 
+    # A noul carries no confidence, as in JEV, so asking for one is the same mistake.
+    with pytest.raises(WrongAnswerType) as caught:
+        answers.confidence("urgent")
+
+    assert caught.value.expected == "choice or score"
+
     with pytest.raises(MissingAnswer):
         answers.noul("nope")
 

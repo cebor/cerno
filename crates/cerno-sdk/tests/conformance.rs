@@ -245,6 +245,20 @@ async fn reading_an_answer_as_the_wrong_type_names_both_types() {
         "{err:?}"
     );
 
+    // A noul carries no confidence, as in JEV, so asking for one is the same mistake.
+    let err = answers.confidence("urgent").unwrap_err();
+    assert!(
+        matches!(
+            &err,
+            Error::WrongType {
+                expected: "choice or score",
+                actual: "noul",
+                ..
+            }
+        ),
+        "{err:?}"
+    );
+
     assert!(matches!(
         answers.noul("nope").unwrap_err(),
         Error::MissingAnswer(_)

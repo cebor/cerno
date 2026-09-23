@@ -47,7 +47,6 @@ export interface LevelProbability {
 }
 
 interface AnswerBase {
-  confidence: number;
   /**
    * The logprob fed into the softmax, per label. A floor substitution appears here like any
    * other value; `truncated` is what says one happened.
@@ -75,6 +74,8 @@ export interface NoulAnswer extends AnswerBase {
 export interface ChoiceAnswer extends AnswerBase {
   type: "choice";
   choice: string;
+  /** How peaked the distribution was, in 0..=1. */
+  confidence: number;
   /** The winning option's position in the request. */
   index: number;
   probabilities: OptionProbability[];
@@ -87,6 +88,8 @@ export interface ScoreAnswer extends AnswerBase {
   /** The probability-weighted mean level — often more useful than the argmax. */
   expected_score: number;
   legend: string;
+  /** How peaked the distribution was, in 0..=1. */
+  confidence: number;
   probabilities: LevelProbability[];
 }
 

@@ -122,16 +122,11 @@
             "type": "object",
             "required": [
               "noul",
-              "confidence",
               "raw_logprobs",
               "truncated",
               "type"
             ],
             "properties": {
-              "confidence": {
-                "type": "number",
-                "format": "double"
-              },
               "noul": {
                 "type": "number",
                 "format": "double",

@@ -86,9 +86,9 @@ class Answer:
     """
 
     type: Literal["noul", "choice", "score"]
-    confidence: float
     raw_logprobs: Mapping[str, float]
     truncated: bool
+    confidence: float | None = None
     noul: float | None = None
     choice: str | None = None
     index: int | None = None
@@ -117,7 +117,7 @@ class Answer:
 
         return cls(
             type=kind,
-            confidence=data["confidence"],
+            confidence=data.get("confidence"),
             raw_logprobs=dict(data.get("raw_logprobs", {})),
             truncated=data["truncated"],
             noul=data.get("noul"),
@@ -205,7 +205,12 @@ class Answers:
         return value
 
     def confidence(self, question_id: str) -> float:
-        return self[question_id].confidence
+        """How peaked the distribution was, in 0..=1. A noul has none, as in JEV: its
+        probability is already the whole answer."""
+        answer = self[question_id]
+        if answer.confidence is None:
+            raise WrongAnswerType(question_id, "choice or score", answer.type)
+        return answer.confidence
 
     def truncated(self, question_id: str) -> bool:
         """Whether some label fell outside the host's reporting window, making its probability

@@ -289,13 +289,13 @@ fn answer_lines(
         ),
     };
 
-    // Headline: id and value on the left, confidence pushed to the right edge.
+    // Headline: id and value on the left, confidence pushed to the right edge. A noul has no
+    // confidence — its probability already is the answer — so its right side stays empty.
     let left = format!("{}  {value}", truncate(id, 20));
-    let right = format!(
-        "conf {:.3} {}",
-        answer.confidence(),
-        bar(answer.confidence(), 10)
-    );
+    let right = answer
+        .confidence()
+        .map(|confidence| format!("conf {confidence:.3} {}", bar(confidence, 10)))
+        .unwrap_or_default();
     let gap = width
         .saturating_sub(left.chars().count() + right.chars().count())
         .max(2);

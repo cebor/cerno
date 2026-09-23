@@ -253,7 +253,6 @@ impl Engine {
             QuestionKind::Noul(_) => Answer::Noul {
                 // Option 0 is "Yes" by construction; see `ballot_for`.
                 noul: tally.probabilities[0],
-                confidence: tally.confidence,
                 raw_logprobs: tally.logprobs,
                 truncated: !tally.truncated_labels.is_empty(),
                 truncated_labels: tally.truncated_labels,

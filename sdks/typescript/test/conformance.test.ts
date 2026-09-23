@@ -145,6 +145,12 @@ test("reading an answer as the wrong type names both types", async () => {
       err instanceof WrongAnswerType && err.expected === "choice" && err.actual === "noul",
   );
 
+  // A noul carries no confidence, as in JEV, so asking for one is the same mistake.
+  assert.throws(
+    () => answers.confidence("urgent"),
+    (err: unknown) => err instanceof WrongAnswerType && err.expected === "choice or score",
+  );
+
   assert.throws(() => answers.noul("nope"), MissingAnswer);
 });
 

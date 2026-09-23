@@ -58,7 +58,6 @@
           "urgent": {
             "type": "noul",
             "noul": 0.9911299643691728,
-            "confidence": 0.9267945133933535,
             "raw_logprobs": {"A": -0.010017034211529765, "B": -4.726183891296387},
             "truncated": false
           },
@@ -113,7 +112,6 @@
           "q": {
             "type": "noul",
             "noul": 0.0000001,
-            "confidence": 0.999,
             "raw_logprobs": {"A": -15.5, "B": -0.001},
             "truncated": true,
             "truncated_labels": ["A"]

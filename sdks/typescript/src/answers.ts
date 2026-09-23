@@ -70,9 +70,16 @@ export class Answers {
     return this.typed<ScoreAnswer>(id, "score").legend;
   }
 
-  /** How peaked the distribution behind `id` was, in 0..=1. */
+  /**
+   * How peaked the distribution behind `id` was, in 0..=1. A noul has none, as in JEV: its
+   * probability is already the whole answer.
+   */
   confidence(id: string): number {
-    return this.get(id).confidence;
+    const answer = this.get(id);
+    if (answer.type === "noul") {
+      throw new WrongAnswerType(id, "choice or score", answer.type);
+    }
+    return answer.confidence;
   }
 
   /**

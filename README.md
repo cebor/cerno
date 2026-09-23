@@ -26,7 +26,7 @@ curl localhost:3000/v1/systemone -H 'content-type: application/json' -d '{
 
 ```json
 {"answers": {
-   "urgent": {"type": "noul",   "noul": 0.9911, "confidence": 0.927, "truncated": false},
+   "urgent": {"type": "noul",   "noul": 0.9911, "truncated": false},
    "team":   {"type": "choice", "choice": "Facility", "index": 1, "confidence": 0.939},
    "sev":    {"type": "score",  "score": 5, "expected_score": 4.88, "legend": "5"}},
  "model": "gemma4:e2b-it-qat",

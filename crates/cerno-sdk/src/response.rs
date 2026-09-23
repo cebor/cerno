@@ -95,9 +95,13 @@ impl Answers {
         }
     }
 
-    /// How peaked the distribution behind `id` was, in `0.0..=1.0`.
+    /// How peaked the distribution behind `id` was, in `0.0..=1.0`. A noul has none, as in
+    /// JEV: its probability is already the whole answer.
     pub fn confidence(&self, id: &str) -> Result<f64, Error> {
-        Ok(self.get(id)?.confidence())
+        let answer = self.get(id)?;
+        answer
+            .confidence()
+            .ok_or_else(|| self.wrong_type(id, "choice or score", answer))
     }
 
     /// Whether some label for `id` fell outside the host's reporting window, which makes its

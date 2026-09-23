@@ -211,7 +211,6 @@ pub enum Answer {
     Noul {
         /// Probability that the answer is yes, in `0.0..=1.0`.
         noul: f64,
-        confidence: f64,
         raw_logprobs: BTreeMap<String, f64>,
         truncated: bool,
         #[serde(default)]
@@ -274,11 +273,11 @@ impl Answer {
     }
 
     /// How peaked the distribution is, in `0.0..=1.0`. See `cerno_core::math::confidence`.
-    pub fn confidence(&self) -> f64 {
+    /// `None` for a noul: as in JEV, its probability is already the whole answer.
+    pub fn confidence(&self) -> Option<f64> {
         match self {
-            Self::Noul { confidence, .. }
-            | Self::Choice { confidence, .. }
-            | Self::Score { confidence, .. } => *confidence,
+            Self::Noul { .. } => None,
+            Self::Choice { confidence, .. } | Self::Score { confidence, .. } => Some(*confidence),
         }
     }
 }
@@ -457,7 +456,6 @@ mod tests {
         let answer: Answer = serde_json::from_value(json!({
             "type": "noul",
             "noul": 0.9,
-            "confidence": 0.5,
             "raw_logprobs": {"A": -0.1, "B": -2.4},
             "truncated": false
         }))
