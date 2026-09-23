@@ -208,4 +208,4 @@ $(section_of "$version")
 EOF
 echo "Tagged $tag."
 echo
-echo "    git push origin main $tag"
+echo "    git push origin main $tag && git push github main $tag"

@@ -1,0 +1,64 @@
+# The same suites as .gitlab-ci.yml: every host is mocked, so these run anywhere.
+# The live checks (`cargo run -p cerno-sdk --example smoke`, `cargo run -p cerno-bench`)
+# need a model and stay out of CI.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Referenced by branch: this action publishes no release tags.
+      - uses: dtolnay/rust-toolchain@stable # stable, edition 2024
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+
+  python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/python
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: sdks/python/uv.lock
+      - run: uv run --locked --extra dev pytest
+
+  typescript:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/typescript
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24 # the tests run .ts directly, which needs 22.18+
+          cache: npm
+          cache-dependency-path: sdks/typescript/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # Both module formats; the CJS one is otherwise never built before a publish.
+      - run: npm run build
