@@ -264,6 +264,21 @@ mod tests {
     }
 
     #[test]
+    fn down_past_the_last_question_lands_on_the_add_row_and_enter_opens_the_editor() {
+        let mut app = with_questions();
+
+        handle(&mut app, key(KeyCode::Down));
+        handle(&mut app, key(KeyCode::Down));
+        assert!(app.on_add_row());
+
+        handle(&mut app, key(KeyCode::Enter));
+        assert!(app.editor.as_ref().is_some_and(|e| !e.is_editing()));
+
+        handle(&mut app, key(KeyCode::Enter));
+        assert_eq!(app.questions.len(), 3);
+    }
+
+    #[test]
     fn a_opens_the_editor_and_enter_commits_it() {
         let mut app = with_questions();
 

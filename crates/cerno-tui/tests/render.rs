@@ -11,7 +11,8 @@ use cerno_tui::session::Session;
 use cerno_types::ErrorCode;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
-use ratatui::style::Color;
+use ratatui::buffer::Buffer;
+use ratatui::style::{Color, Modifier};
 
 fn answers_from_conformance() -> Answers {
     let path =
@@ -58,7 +59,9 @@ fn app_with_answers() -> App {
         },
         "http://localhost:3000".into(),
     );
-    app.answers = Some(answers_from_conformance());
+    // Through a send, so the answers carry the questions they were asked with.
+    let generation = app.begin_send();
+    assert!(app.finish_send(generation, Ok(answers_from_conformance())));
     app.healthy = Some(true);
     app
 }
@@ -312,4 +315,114 @@ fn a_small_terminal_does_not_panic() {
         let lines = screen_sized(&app, width, height);
         assert_eq!(lines.len(), height as usize);
     }
+}
+
+fn buffer_sized(app: &App, width: u16, height: u16) -> Buffer {
+    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+    terminal.draw(|frame| render::draw(frame, app)).unwrap();
+    terminal.backend().buffer().clone()
+}
+
+/// The text of row `y` between columns `from` and `to`.
+fn row_text(buffer: &Buffer, y: u16, from: u16, to: u16) -> String {
+    (from..to)
+        .filter_map(|x| buffer.cell((x, y)).map(|c| c.symbol().to_string()))
+        .collect()
+}
+
+/// The first row whose right half contains `needle`, i.e. the answers pane.
+fn answers_row(buffer: &Buffer, needle: &str) -> u16 {
+    let area = buffer.area;
+    (0..area.height)
+        .find(|y| row_text(buffer, *y, area.width / 2, area.width).contains(needle))
+        .unwrap_or_else(|| panic!("{needle:?} not in the answers pane"))
+}
+
+#[test]
+fn the_add_row_can_be_selected_with_the_cursor() {
+    let mut app = app_with_answers();
+    app.focus = Focus::Questions;
+    app.selected = app.questions.len();
+
+    let lines = screen(&app);
+
+    assert!(contains(&lines, "▸ + add question"), "{lines:#?}");
+}
+
+/// A wide terminal gets a wider bar, not a wider strip of nothing on the right.
+#[test]
+fn bars_fill_the_pane() {
+    let app = app_with_answers();
+
+    for (width, height) in [(120u16, 32u16), (200, 50)] {
+        let buffer = buffer_sized(&app, width, height);
+        let y = answers_row(&buffer, "B Facility");
+        let row = row_text(&buffer, y, width / 2, width);
+
+        // The percentage sits right against the pane's border.
+        let trimmed = row.trim_end_matches('│').trim_end();
+        assert!(trimmed.ends_with('%'), "{row:?}");
+        assert!(
+            row.trim_end_matches('│').len() - trimmed.len() <= 1,
+            "space left over at {width}: {row:?}"
+        );
+
+        let bar = row.chars().filter(|c| matches!(c, '█' | '░')).count();
+        assert!(bar > 24, "bar still capped at {width}: {row:?}");
+    }
+}
+
+#[test]
+fn the_question_text_is_shown_under_its_answer() {
+    let buffer = buffer_sized(&app_with_answers(), 120, 32);
+
+    let headline = answers_row(&buffer, "noul 0.9911");
+    assert_eq!(answers_row(&buffer, "Ist das dringend?"), headline + 1);
+}
+
+#[test]
+fn the_winning_option_is_highlighted() {
+    let buffer = buffer_sized(&app_with_answers(), 120, 32);
+    let highlighted = |y: u16| {
+        let green_bar = (60..120).any(|x| {
+            buffer
+                .cell((x, y))
+                .is_some_and(|c| c.symbol() == "█" && c.style().fg == Some(Color::Green))
+        });
+        let bold_label = (60..120).any(|x| {
+            buffer.cell((x, y)).is_some_and(|c| {
+                c.symbol() != " " && c.style().add_modifier.contains(Modifier::BOLD)
+            })
+        });
+        green_bar && bold_label
+    };
+
+    assert!(
+        highlighted(answers_row(&buffer, "B Facility")),
+        "the winner is not highlighted"
+    );
+    assert!(
+        !highlighted(answers_row(&buffer, "A IT")),
+        "a losing option was highlighted"
+    );
+}
+
+/// A label that fell outside the host's window is a bound; its own row has to say so.
+#[test]
+fn a_truncated_label_is_marked_on_its_row() {
+    let mut app = app_with_answers();
+    app.answers = Some(truncated_answer());
+
+    let buffer = buffer_sized(&app, 120, 32);
+
+    let yes = answers_row(&buffer, "A Yes");
+    assert!(
+        row_text(&buffer, yes, 60, 120).contains('≤'),
+        "Yes is the bound"
+    );
+    let no = answers_row(&buffer, "B No");
+    assert!(
+        !row_text(&buffer, no, 60, 120).contains('≤'),
+        "No was observed"
+    );
 }

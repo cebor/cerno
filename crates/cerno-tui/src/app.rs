@@ -79,6 +79,7 @@ impl Failure {
 pub struct App {
     pub state: TextArea<'static>,
     pub questions: Vec<QuestionDraft>,
+    /// Ranges over `0..=questions.len()`: one past the last question is the "add" row.
     pub selected: usize,
     pub focus: Focus,
 
@@ -89,6 +90,11 @@ pub struct App {
 
     pub status: Status,
     pub answers: Option<Answers>,
+    /// `(id, question)` for the request in flight, taken when it was sent.
+    sent: Vec<(String, String)>,
+    /// `(id, question)` as they were when `answers` was asked. The drafts may have been edited
+    /// since, and an answer shown under a question it was never asked would mislead.
+    answered: Vec<(String, String)>,
     /// Whether `answers` belongs to an older request than the form now describes.
     pub stale: bool,
 
@@ -116,6 +122,8 @@ impl App {
             calibration: session.calibration,
             status: Status::Idle,
             answers: None,
+            sent: Vec::new(),
+            answered: Vec::new(),
             stale: false,
             editor: None,
             show_help: false,
@@ -142,16 +150,19 @@ impl App {
 
     // -- questions ---------------------------------------------------------------------------
 
+    /// Whether the cursor is on the "add question" row after the last question.
+    pub fn on_add_row(&self) -> bool {
+        self.selected >= self.questions.len()
+    }
+
     pub fn select_next(&mut self) {
-        if !self.questions.is_empty() {
-            self.selected = (self.selected + 1) % self.questions.len();
-        }
+        let rows = self.questions.len() + 1;
+        self.selected = (self.selected + 1) % rows;
     }
 
     pub fn select_previous(&mut self) {
-        if !self.questions.is_empty() {
-            self.selected = (self.selected + self.questions.len() - 1) % self.questions.len();
-        }
+        let rows = self.questions.len() + 1;
+        self.selected = (self.selected + rows - 1) % rows;
     }
 
     /// Open the editor on a new question, offering an id that does not collide with an
@@ -160,8 +171,11 @@ impl App {
         self.editor = Some(Editor::adding(self.next_id()));
     }
 
+    /// Edit the selected question, or start a new one when the cursor is on the add row.
     pub fn edit_selected(&mut self) {
-        if let Some(draft) = self.questions.get(self.selected) {
+        if self.on_add_row() {
+            self.add_question();
+        } else if let Some(draft) = self.questions.get(self.selected) {
             self.editor = Some(Editor::editing(draft.clone(), self.selected));
         }
     }
@@ -246,6 +260,11 @@ impl App {
     /// Enter the sending state and return the generation the result must carry to be accepted.
     pub fn begin_send(&mut self) -> u64 {
         self.generation += 1;
+        self.sent = self
+            .questions
+            .iter()
+            .map(|q| (q.id.clone(), q.question.trim().to_string()))
+            .collect();
         self.status = Status::Sending {
             started: Instant::now(),
             generation: self.generation,
@@ -271,6 +290,7 @@ impl App {
         match result {
             Ok(answers) => {
                 self.answers = Some(answers);
+                self.answered = std::mem::take(&mut self.sent);
                 self.stale = false;
                 self.status = Status::Idle;
             }
@@ -282,6 +302,14 @@ impl App {
             }
         }
         true
+    }
+
+    /// The question text an answer on screen was asked with.
+    pub fn question_for(&self, id: &str) -> Option<&str> {
+        self.answered
+            .iter()
+            .find(|(asked, _)| asked == id)
+            .map(|(_, question)| question.as_str())
     }
 
     pub fn cancel_send(&mut self) {
@@ -373,10 +401,58 @@ mod tests {
 
         app.select_previous();
         app.select_previous();
-        assert_eq!(app.selected, 2, "wraps backwards past zero");
+        assert_eq!(
+            app.selected, 3,
+            "wraps backwards past zero onto the add row"
+        );
+        assert!(app.on_add_row());
 
         app.select_next();
-        assert_eq!(app.selected, 0, "wraps forwards past the end");
+        assert_eq!(app.selected, 0, "wraps forwards past the add row");
+    }
+
+    /// The add row is a list position like any other: Enter on it adds rather than edits.
+    #[test]
+    fn editing_the_add_row_adds_a_question() {
+        let mut app = app();
+        app.questions = vec![draft("a")];
+        app.selected = 1;
+
+        app.edit_selected();
+        assert!(!app.editor.as_ref().unwrap().is_editing());
+        app.commit_editor();
+
+        assert_eq!(app.questions.len(), 2);
+        assert_eq!(
+            app.questions[0].id, "a",
+            "the existing question is untouched"
+        );
+    }
+
+    #[test]
+    fn deleting_on_the_add_row_deletes_nothing() {
+        let mut app = app();
+        app.questions = vec![draft("a")];
+        app.selected = 1;
+
+        app.delete_selected();
+
+        assert_eq!(app.questions.len(), 1);
+    }
+
+    /// An answer is shown under the question it was asked with, not whatever the draft says now.
+    #[test]
+    fn answers_keep_the_question_as_it_was_sent() {
+        let mut app = app();
+        app.questions = vec![draft("a")];
+
+        let generation = app.begin_send();
+        app.questions[0].question = "edited while in flight".into();
+        assert!(app.finish_send(generation, Ok(no_answers())));
+        app.questions[0].question = "edited afterwards".into();
+
+        assert_eq!(app.question_for("a"), Some("Is this urgent?"));
+        assert_eq!(app.question_for("missing"), None);
     }
 
     /// An empty list must not panic or produce an out-of-range index.

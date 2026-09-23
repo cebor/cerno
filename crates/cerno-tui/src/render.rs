@@ -116,9 +116,15 @@ fn draw_questions(frame: &mut Frame, app: &App, area: Rect) {
         ])));
     }
 
+    // The add row is a list position like the questions above it, so the cursor can reach it.
+    let on_add = focused && app.on_add_row();
     items.push(ListItem::new(Span::styled(
-        "  + add question  (a)",
-        Style::default().fg(Color::DarkGray),
+        format!("{}+ add question  (a)", if on_add { "▸ " } else { "  " }),
+        if on_add {
+            Style::default().add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        },
     )));
 
     frame.render_widget(List::new(items), inner);
@@ -164,14 +170,14 @@ fn draw_answers(frame: &mut Frame, app: &App, area: Rect) {
         Style::default()
     };
 
-    let bar_width = (inner.width as usize).saturating_sub(26).clamp(4, 24);
+    let width = inner.width as usize;
     let mut lines: Vec<Line> = Vec::new();
 
     for id in answers.ids() {
         let Ok(answer) = answers.get(id) else {
             continue;
         };
-        lines.extend(answer_lines(id, answer, bar_width, base));
+        lines.extend(answer_lines(id, app.question_for(id), answer, width, base));
         lines.push(Line::default());
     }
 
@@ -188,85 +194,194 @@ fn draw_answers(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }
 
-/// One answer, headline plus a bar per option.
-fn answer_lines<'a>(id: &'a str, answer: &'a Answer, width: usize, base: Style) -> Vec<Line<'a>> {
+/// One option of an answer, as a row in the pane.
+struct Row {
+    label: String,
+    probability: f64,
+    winner: bool,
+}
+
+/// Cells in an option row besides its label and bar: indent, letter and space, the spaces
+/// around the bar, the bound marker and `100.0%`.
+const ROW_FIXED: usize = 2 + 2 + 1 + 1 + 1 + 6;
+
+/// The letter the model answered with for the option at `index`, in the order
+/// `cerno-core`'s `labels` hands them out: a noul's Yes is `A`, a score's level 1 is `A`.
+fn letter(index: usize) -> String {
+    char::from(b'A' + (index as u8).min(25)).to_string()
+}
+
+/// A colour for a stale answer stays dim; everything else takes the accent.
+fn tint(base: Style, colour: Color) -> Style {
+    if base.fg.is_some() {
+        base
+    } else {
+        base.fg(colour)
+    }
+}
+
+/// One answer: headline, the question it was asked with, a bar per option, and warnings.
+fn answer_lines(
+    id: &str,
+    question: Option<&str>,
+    answer: &Answer,
+    width: usize,
+    base: Style,
+) -> Vec<Line<'static>> {
     let bold = base.add_modifier(Modifier::BOLD);
     let dim = base.fg(Color::DarkGray);
     let mut lines = Vec::new();
 
-    let headline = |value: String, confidence: f64| {
-        Line::from(vec![
-            Span::styled(format!("{:<9}", truncate(id, 9)), bold),
-            Span::styled(value, bold),
-            Span::styled(format!("   conf {confidence:.3}"), dim),
-        ])
-    };
-
-    match answer {
-        Answer::Noul {
-            noul, confidence, ..
-        } => {
-            lines.push(headline(format!("noul {noul:.4}"), *confidence));
-            lines.push(option_line("Yes", *noul, width, base));
-            lines.push(option_line("No", 1.0 - *noul, width, base));
-        }
+    let (value, rows, detail) = match answer {
+        Answer::Noul { noul, .. } => (
+            format!("noul {noul:.4}"),
+            vec![
+                Row {
+                    label: "Yes".into(),
+                    probability: *noul,
+                    winner: *noul >= 0.5,
+                },
+                Row {
+                    label: "No".into(),
+                    probability: 1.0 - *noul,
+                    winner: *noul < 0.5,
+                },
+            ],
+            None,
+        ),
 
         Answer::Choice {
             choice,
-            confidence,
+            index,
             probabilities,
             ..
-        } => {
-            lines.push(headline(format!("choice → {choice}"), *confidence));
-            for entry in probabilities {
-                lines.push(option_line(&entry.option, entry.probability, width, base));
-            }
-        }
+        } => (
+            format!("choice → {choice}"),
+            probabilities
+                .iter()
+                .enumerate()
+                .map(|(i, entry)| Row {
+                    label: entry.option.clone(),
+                    probability: entry.probability,
+                    winner: i == *index,
+                })
+                .collect(),
+            None,
+        ),
 
         Answer::Score {
             score,
             expected_score,
             legend,
-            confidence,
             probabilities,
             ..
-        } => {
-            lines.push(headline(
-                format!("score → {score} \"{legend}\""),
-                *confidence,
-            ));
-            lines.push(Line::from(Span::styled(
-                format!("          expected {expected_score:.2}"),
-                dim,
-            )));
-            for entry in probabilities {
-                lines.push(option_line(
-                    &format!("{} {}", entry.level, entry.legend),
-                    entry.probability,
-                    width,
-                    base,
-                ));
-            }
-        }
+        } => (
+            format!("score → {score} \"{legend}\""),
+            probabilities
+                .iter()
+                .map(|entry| Row {
+                    label: format!("{} {}", entry.level, entry.legend),
+                    probability: entry.probability,
+                    winner: entry.level == *score,
+                })
+                .collect(),
+            Some(format!("expected {expected_score:.2}")),
+        ),
+    };
+
+    // Headline: id and value on the left, confidence pushed to the right edge.
+    let left = format!("{}  {value}", truncate(id, 20));
+    let right = format!(
+        "conf {:.3} {}",
+        answer.confidence(),
+        bar(answer.confidence(), 10)
+    );
+    let gap = width
+        .saturating_sub(left.chars().count() + right.chars().count())
+        .max(2);
+    lines.push(Line::from(vec![
+        Span::styled(left, bold),
+        Span::raw(" ".repeat(gap)),
+        Span::styled(right, dim),
+    ]));
+
+    if let Some(question) = question.filter(|q| !q.is_empty()) {
+        lines.push(Line::from(Span::styled(
+            format!("  {question}"),
+            dim.add_modifier(Modifier::ITALIC),
+        )));
+    }
+    if let Some(detail) = detail {
+        lines.push(Line::from(Span::styled(format!("  {detail}"), dim)));
+    }
+
+    // The label column fits the longest label, up to two fifths of the pane; the bar takes the
+    // rest, so a wide terminal gets a finer bar rather than empty space.
+    let longest = rows
+        .iter()
+        .map(|r| r.label.chars().count())
+        .max()
+        .unwrap_or(0);
+    let label_width = longest.min(width * 2 / 5).max(3);
+    let bar_width = width.saturating_sub(ROW_FIXED + label_width).max(1);
+
+    let bounded = answer.truncated_labels();
+    for (index, row) in rows.iter().enumerate() {
+        let letter = letter(index);
+        let bound = bounded
+            .iter()
+            .any(|l| l.trim().eq_ignore_ascii_case(&letter));
+        lines.push(option_line(
+            &letter,
+            row,
+            label_width,
+            bar_width,
+            bound,
+            base,
+        ));
     }
 
     // A truncated answer is an upper bound, not an observation, and saying so is the whole
     // reason the flag travels back with every answer.
     if answer.truncated() {
-        lines.push(Line::from(Span::styled(
-            "  ⚠ truncated — a label fell outside the host's window; its value is an upper bound",
-            base.fg(Color::Yellow),
-        )));
+        let text = if bounded.is_empty() {
+            "  ⚠ truncated — a label fell outside the host's window; its value is an upper bound"
+                .to_string()
+        } else {
+            format!(
+                "  ⚠ truncated: {} fell outside the host's window; ≤ marks an upper bound",
+                bounded.join(", ")
+            )
+        };
+        lines.push(Line::from(Span::styled(text, tint(base, Color::Yellow))));
     }
 
     lines
 }
 
-fn option_line<'a>(label: &str, probability: f64, width: usize, base: Style) -> Line<'a> {
+fn option_line(
+    letter: &str,
+    row: &Row,
+    label_width: usize,
+    bar_width: usize,
+    bound: bool,
+    base: Style,
+) -> Line<'static> {
+    let (text, colour) = if row.winner {
+        (base.add_modifier(Modifier::BOLD), Color::Green)
+    } else {
+        (base, Color::Cyan)
+    };
+
     Line::from(vec![
-        Span::styled(format!("  {:<12}", truncate(label, 12)), base),
-        Span::styled(bar(probability, width), base.fg(Color::Cyan)),
-        Span::styled(format!(" {:>5.1}%", probability * 100.0), base),
+        Span::styled(format!("  {letter} "), base.fg(Color::DarkGray)),
+        Span::styled(
+            format!("{:<label_width$} ", truncate(&row.label, label_width)),
+            text,
+        ),
+        Span::styled(bar(row.probability, bar_width), tint(base, colour)),
+        Span::styled(if bound { " ≤" } else { "  " }, tint(base, Color::Yellow)),
+        Span::styled(format!("{:>5.1}%", row.probability * 100.0), text),
     ])
 }
 
@@ -400,7 +515,8 @@ fn draw_editor(frame: &mut Frame, editor: &Editor, area: Rect) {
 fn draw_help(frame: &mut Frame, area: Rect) {
     let lines = vec![
         "Tab / Shift+Tab   move between panes",
-        "↑ ↓               select a question",
+        "↑ ↓               select a question, or the add row below them",
+        "Enter             edit the selected question, or add on the add row",
         "a / e / d         add · edit · delete",
         "Ctrl+S            send",
         "Esc               close a dialog, or cancel a request in flight",
