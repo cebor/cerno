@@ -35,6 +35,12 @@ test("a service that never answers times out as a TransportError", async () => {
   await assert.rejects(() => client.models(), TransportError);
 });
 
+test("health is false, not a hang, when the service never answers", async () => {
+  const client = new Client({ baseUrl: "http://cerno.test", fetch: hanging, timeoutMs: 20 });
+
+  assert.equal(await client.health(), false);
+});
+
 test("health is false when the service cannot be reached", async () => {
   const client = new Client({ baseUrl: "http://cerno.test", fetch: refusing });
 

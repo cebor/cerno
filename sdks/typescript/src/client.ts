@@ -61,9 +61,12 @@ export class Client {
     return this.request<ModelsResponse>("GET", "/v1/models");
   }
 
+  /** Whether the service is up. False, not an error, when it cannot be reached in time. */
   async health(): Promise<boolean> {
     try {
-      const response = await this.doFetch(`${this.baseUrl}/health`);
+      const response = await this.doFetch(`${this.baseUrl}/health`, {
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
       return response.ok;
     } catch {
       return false;
