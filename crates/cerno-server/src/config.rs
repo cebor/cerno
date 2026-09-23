@@ -43,6 +43,13 @@ pub enum ConfigError {
         source: toml::de::Error,
     },
 
+    /// A value that parses but cannot work: an empty model name or URL, a zero timeout.
+    #[error("{setting} {reason}")]
+    Unusable {
+        setting: &'static str,
+        reason: &'static str,
+    },
+
     #[error(
         "default_model {model:?} is not in the model table, and strict_models is on; \
          configure it or pick one of: {known:?}"
@@ -193,11 +200,42 @@ impl Config {
         };
 
         config.validate()?;
+
+        // Not an error: both aliases work, only naming the model directly is ambiguous.
+        for (model, aliases) in config.conflicting_aliases() {
+            tracing::warn!(
+                model,
+                ?aliases,
+                "aliases point at the same model with different calibrations; a request naming \
+                 the model itself gets the first alias's"
+            );
+        }
+
         Ok(config)
     }
 
     /// Reject a configuration that would start but answer wrongly.
     fn validate(&self) -> Result<(), ConfigError> {
+        // Each of these starts a server that fails every request, and says why only then.
+        if self.default_model.trim().is_empty() {
+            return Err(ConfigError::Unusable {
+                setting: "default_model",
+                reason: "must not be empty",
+            });
+        }
+        if self.host_url.trim().is_empty() {
+            return Err(ConfigError::Unusable {
+                setting: "CERNO_HOST_URL",
+                reason: "must not be empty; unset it to use the host's default",
+            });
+        }
+        if self.host_timeout.is_zero() {
+            return Err(ConfigError::Unusable {
+                setting: "CERNO_HOST_TIMEOUT_SECS",
+                reason: "must be above zero",
+            });
+        }
+
         for (alias, entry) in &self.models {
             let temperature = entry.calibration.temperature;
             if !temperature.is_finite() || temperature <= 0.0 {
@@ -235,6 +273,31 @@ impl Config {
             return None;
         }
         Some((name.to_string(), Calibration::default()))
+    }
+
+    /// Models that several aliases point at with different temperatures, with those aliases.
+    ///
+    /// [`Config::resolve`] gives a request naming such a model the calibration of the first
+    /// alias in order, which is a guess the operator should know about.
+    pub fn conflicting_aliases(&self) -> Vec<(String, Vec<String>)> {
+        let mut by_model: BTreeMap<&str, Vec<(&str, f64)>> = BTreeMap::new();
+        for (alias, entry) in &self.models {
+            by_model
+                .entry(&entry.model)
+                .or_default()
+                .push((alias, entry.calibration.temperature));
+        }
+
+        by_model
+            .into_iter()
+            .filter(|(_, aliases)| aliases.iter().any(|(_, t)| *t != aliases[0].1))
+            .map(|(model, aliases)| {
+                (
+                    model.to_string(),
+                    aliases.iter().map(|(a, _)| a.to_string()).collect(),
+                )
+            })
+            .collect()
     }
 
     pub fn known_models(&self) -> Vec<String> {
@@ -321,6 +384,51 @@ mod tests {
         }
 
         assert!(config(false).validate().is_ok());
+    }
+
+    /// Each of these parses, and each would fail every request rather than the startup.
+    #[test]
+    fn an_empty_model_or_url_and_a_zero_timeout_are_refused_at_startup() {
+        let mut empty_model = config(false);
+        empty_model.default_model = " ".into();
+        let mut empty_url = config(false);
+        empty_url.host_url = String::new();
+        let mut no_time = config(false);
+        no_time.host_timeout = Duration::ZERO;
+
+        for (config, setting) in [
+            (empty_model, "default_model"),
+            (empty_url, "CERNO_HOST_URL"),
+            (no_time, "CERNO_HOST_TIMEOUT_SECS"),
+        ] {
+            assert!(
+                matches!(
+                    config.validate(),
+                    Err(ConfigError::Unusable { setting: s, .. }) if s == setting
+                ),
+                "{setting} was accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn aliases_disagreeing_about_one_model_are_found() {
+        let mut config = config(false);
+        config
+            .models
+            .insert("same".into(), entry("gemma4:e2b-it-qat", 2.5));
+        assert!(config.conflicting_aliases().is_empty(), "same temperature");
+
+        config
+            .models
+            .insert("warm".into(), entry("gemma4:e2b-it-qat", 4.0));
+        assert_eq!(
+            config.conflicting_aliases(),
+            vec![(
+                "gemma4:e2b-it-qat".to_string(),
+                vec!["same".to_string(), "small".to_string(), "warm".to_string()]
+            )]
+        );
     }
 
     #[test]
