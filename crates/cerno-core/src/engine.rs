@@ -47,6 +47,10 @@ impl EngineError {
             Self::Invalid { code, .. } => *code,
             Self::NoLabelMatched { .. } => ErrorCode::NoLabelMatched,
             Self::Host(HostError::Timeout(_)) => ErrorCode::HostTimeout,
+            // Every runtime answers a model it does not have with 404. Without `strict_models`
+            // that is where a misspelt `model` surfaces, and it is the caller's to fix: as a 5xx
+            // it would read as "retry", and no retry changes the answer.
+            Self::Host(HostError::Status { status: 404, .. }) => ErrorCode::UnknownModel,
             Self::Host(_) => ErrorCode::HostUnavailable,
         }
     }

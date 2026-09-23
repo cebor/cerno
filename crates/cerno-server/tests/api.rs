@@ -485,6 +485,33 @@ async fn strict_mode_rejects_an_unconfigured_model() {
     assert_eq!(body["code"], "unknown_model");
 }
 
+/// Without strict mode a misspelt model reaches the host, which answers 404. That is the
+/// caller's mistake, the same as in strict mode, and not a 5xx inviting a retry.
+#[tokio::test]
+async fn a_model_the_host_does_not_have_is_unknown_not_unavailable() {
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("POST", "/api/chat")
+        .with_status(404)
+        .with_body(r#"{"error":"model \"nope:1b\" not found, try pulling it first"}"#)
+        .create_async()
+        .await;
+
+    let (status, body) = post(
+        app(config(&server.url(), false)),
+        "/v1/systemone",
+        json!({"state": "s", "model": "nope:1b", "questions": [{"id": "q", "noul": "a?"}]}),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["code"], "unknown_model");
+    assert!(
+        body["message"].as_str().unwrap().contains("not found"),
+        "{body}"
+    );
+}
+
 /// The request's calibration must win over the alias's.
 #[tokio::test]
 async fn a_request_calibration_overrides_the_configured_one() {
