@@ -190,9 +190,9 @@ would be the copy that drifts.
 
 | Model                        | Fidelity | Accuracy | p50 (ms) | Brier | Best T |
 |:-----------------------------|---------:|---------:|---------:|------:|-------:|
-| `gemma4:26b-a4b-it-q4_K_M` ¹ |     100% |      97% |      202 | 0.029 |   3.20 |
-| `gemma4:e2b-it-qat`          |     100% |      97% |       40 | 0.006 |   0.80 |
-| `granite4:3b`                |      97% |      78% |       23 | 0.167 |   2.20 |
+| `gemma4:26b-a4b-it-q4_K_M` ¹ |     100% |      97% |      107 | 0.029 |   3.20 |
+| `gemma4:e2b-it-qat`          |     100% |      97% |       43 | 0.006 |   0.80 |
+| `granite4:3b`                |     100% |      81% |       35 | 0.168 |   2.10 |
 | `phi4-mini:3.8b`             |     100% |      86% |       28 | 0.023 |   2.25 |
 
 ¹ Reference model — the yardstick, not a candidate. A snapshot of the generated document above;
@@ -203,9 +203,10 @@ The 4 GB model matches the 26B reference's accuracy on a quarter of the footprin
 times faster, and is *better* calibrated: the large model needs its logits flattened by 3.2
 before its confidences mean anything, while the small one is very slightly under-confident.
 
-**Fidelity is a gate, not a score.** A model that answers in prose instead of a letter is
-unusable here at any accuracy, which is why the benchmark reports it first — and why
-`granite4:3b`, which slipped to 97% on this run, is not a candidate regardless of its speed.
+**Fidelity is a gate, not a score.** It counts the cases where the model's most likely first
+token was one of the offered letters. An answer can be read off a letter further down the
+ranking even when the model was about to write prose, and it looks just as confident, so a
+model below 100% is not a candidate regardless of its accuracy or speed.
 
 ## Configuration
 

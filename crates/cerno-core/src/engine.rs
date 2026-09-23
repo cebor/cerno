@@ -89,7 +89,6 @@ struct Tally {
     confidence: f64,
     /// The labels that fell outside the reported window and were given the floor.
     truncated_labels: Vec<String>,
-    input_tokens: u32,
 }
 
 pub struct Engine {
@@ -238,7 +237,7 @@ impl Engine {
         Ok(())
     }
 
-    /// Ask one question and type its answer.
+    /// Ask one question and type its answer. The `u32` is the prompt's token count.
     pub async fn answer(
         &self,
         state: &str,
@@ -246,10 +245,28 @@ impl Engine {
         model: &str,
         calibration: Calibration,
     ) -> Result<(Answer, u32), EngineError> {
+        let (answer, distribution) = self
+            .answer_with_distribution(state, question, model, calibration)
+            .await?;
+        Ok((answer, distribution.input_tokens))
+    }
+
+    /// [`Engine::answer`], also handing back the distribution the answer was read from.
+    ///
+    /// The answer renormalises over the offered labels, so it cannot say whether the model's
+    /// most likely token was a label at all. The distribution can, which is what the benchmark
+    /// measures fidelity by.
+    pub async fn answer_with_distribution(
+        &self,
+        state: &str,
+        question: &Question,
+        model: &str,
+        calibration: Calibration,
+    ) -> Result<(Answer, FirstTokenDistribution), EngineError> {
         self.validate_question(question)?;
 
         let ballot = ballot_for(&question.kind);
-        let tally = self
+        let (tally, distribution) = self
             .tally(state, &ballot, model, calibration, &question.id)
             .await?;
 
@@ -308,7 +325,7 @@ impl Engine {
             }
         };
 
-        Ok((answer, tally.input_tokens))
+        Ok((answer, distribution))
     }
 
     /// The shared middle: prompt, one host call, read the labels back out.
@@ -319,7 +336,7 @@ impl Engine {
         model: &str,
         calibration: Calibration,
         question_id: &str,
-    ) -> Result<Tally, EngineError> {
+    ) -> Result<(Tally, FirstTokenDistribution), EngineError> {
         let label_set = labels::labels(ballot.options.len());
         let lettered: Vec<(&str, &str)> = label_set
             .iter()
@@ -338,7 +355,8 @@ impl Engine {
             })
             .await?;
 
-        read_labels(&distribution, &label_set, calibration, question_id)
+        let tally = read_labels(&distribution, &label_set, calibration, question_id)?;
+        Ok((tally, distribution))
     }
 }
 
@@ -422,6 +440,5 @@ fn read_labels(
         probabilities,
         confidence,
         truncated_labels,
-        input_tokens: distribution.input_tokens,
     })
 }

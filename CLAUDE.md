@@ -140,12 +140,18 @@ pass them again.
 
 ## Model choice is measured, not assumed
 
-`cargo run -p cerno-bench` over `crates/cerno-bench/dataset.json`. Fidelity — did the model
-answer with one of the offered letters — is reported first and treated as a gate, because a model
-that writes prose is unusable here whatever its accuracy.
+`cargo run -p cerno-bench` over `crates/cerno-bench/dataset.json`. Fidelity — was the model's
+most likely first token one of the offered letters — is reported first and treated as a gate,
+because a model that writes prose is unusable here whatever its accuracy. It has to be the *top*
+token: the engine answers as soon as any label is in the top 20 and renormalises over the labels,
+so an answer read off a letter at `-8` behind a `**` at `-0.01` looks as confident as a real one.
+`Engine::answer_with_distribution` is how the benchmark sees the ranking behind an answer.
 
 The winner is picked mechanically in `pick_winner` (highest accuracy among fully-faithful models,
 ties by p50), so the verdict in the generated doc stays true when the benchmark is re-run.
+
+The verdict's sentence about calibration comes from `calibration_reading`, not from the
+template, for the same reason: it has to fit whichever temperature the winner turns out to have.
 
 ## Two things that will bite in a live test
 

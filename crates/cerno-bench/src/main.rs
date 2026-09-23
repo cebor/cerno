@@ -2,8 +2,9 @@
 //!
 //! Four things decide a model here, and the first one is a gate rather than a score:
 //!
-//! 1. **Label fidelity** — did the model answer with one of the letters it was offered? A model
-//!    that writes prose instead is unusable for cerno at any accuracy.
+//! 1. **Label fidelity** — was the model's most likely first token one of the letters it was
+//!    offered? A model that writes prose instead is unusable for cerno at any accuracy, even
+//!    when a letter turns up further down the ranking and an answer can still be read off it.
 //! 2. **Accuracy** — did it pick the right letter.
 //! 3. **Latency** — the whole point of one forward pass.
 //! 4. **Calibration** — how far its confidence has to be flattened to stop lying.
@@ -100,6 +101,10 @@ struct Outcome {
     primitive: &'static str,
     /// `None` when the model produced no usable label at all.
     answer: Option<Answer>,
+    /// Whether the most likely first token was one of the offered labels. An answer can exist
+    /// without this: the engine reads any label in the top 20 and renormalises, so a model that
+    /// opens with `**` or `The` still gets an answer, and a confident-looking one.
+    faithful: bool,
     correct: bool,
     /// Logprobs per label, for refitting the calibration temperature afterwards.
     logprobs: BTreeMap<String, f64>,
@@ -123,17 +128,19 @@ async fn run_case(engine: &Engine, model: &str, case: &Case) -> Outcome {
     let started = Instant::now();
 
     let result = engine
-        .answer(&case.state, &question, model, Calibration::default())
+        .answer_with_distribution(&case.state, &question, model, Calibration::default())
         .await;
     let latency = started.elapsed();
 
     match result {
-        Ok((answer, _)) => {
+        Ok((answer, distribution)) => {
             let logprobs = match &answer {
                 Answer::Noul { raw_logprobs, .. }
                 | Answer::Choice { raw_logprobs, .. }
                 | Answer::Score { raw_logprobs, .. } => raw_logprobs.clone(),
             };
+            // `raw_logprobs` is keyed by exactly the labels offered.
+            let faithful = top_token_is_a_label(&distribution.tokens, logprobs.keys());
 
             let (picked_index, correct) = match &answer {
                 Answer::Noul { noul, .. } => {
@@ -152,6 +159,7 @@ async fn run_case(engine: &Engine, model: &str, case: &Case) -> Outcome {
                 primitive: case.primitive(),
                 truncated: answer.truncated(),
                 answer: Some(answer),
+                faithful,
                 correct,
                 logprobs,
                 correct_label,
@@ -164,6 +172,7 @@ async fn run_case(engine: &Engine, model: &str, case: &Case) -> Outcome {
             Outcome {
                 primitive: case.primitive(),
                 answer: None,
+                faithful: false,
                 correct: false,
                 logprobs: BTreeMap::new(),
                 correct_label,
@@ -173,6 +182,16 @@ async fn run_case(engine: &Engine, model: &str, case: &Case) -> Outcome {
             }
         }
     }
+}
+
+/// Whether the highest-ranked token spells one of `offered`. `tokens` is ranked, highest first.
+fn top_token_is_a_label<'a>(
+    tokens: &[(String, f64)],
+    mut offered: impl Iterator<Item = &'a String>,
+) -> bool {
+    tokens
+        .first()
+        .is_some_and(|(top, _)| offered.any(|label| labels::matches(top, label)))
 }
 
 fn percentile(sorted: &[u128], p: f64) -> u128 {
@@ -248,7 +267,6 @@ struct Report {
 
 fn summarise(model: &str, outcomes: &[Outcome], cases: &[Case]) -> Report {
     let n = outcomes.len() as f64;
-    let answered: Vec<&Outcome> = outcomes.iter().filter(|o| o.answer.is_some()).collect();
 
     let mut latencies: Vec<u128> = outcomes.iter().map(|o| o.latency.as_millis()).collect();
     latencies.sort_unstable();
@@ -269,7 +287,7 @@ fn summarise(model: &str, outcomes: &[Outcome], cases: &[Case]) -> Report {
 
     Report {
         model: model.to_string(),
-        fidelity: answered.len() as f64 / n,
+        fidelity: outcomes.iter().filter(|o| o.faithful).count() as f64 / n,
         accuracy: outcomes.iter().filter(|o| o.correct).count() as f64 / n,
         per_primitive,
         p50: percentile(&latencies, 0.50),
@@ -395,8 +413,8 @@ fn pct(v: f64) -> String {
     }
 }
 
-/// The best candidate: highest accuracy among models that answered every case with a usable
-/// label, ties broken by median latency. Fidelity is a gate first — a model cerno cannot read is
+/// The best candidate: highest accuracy among models whose top token was an offered label in
+/// every case, ties broken by median latency. Fidelity is a gate first — a model cerno cannot read is
 /// not a candidate at any accuracy — and the reference is excluded, since it is the yardstick
 /// rather than an option.
 fn pick_winner<'a>(reports: &'a [Report], reference: Option<&str>) -> Option<&'a Report> {
@@ -480,6 +498,23 @@ fn markdown_table(headers: &[&str], rows: &[Vec<String>]) -> String {
     out
 }
 
+/// What a best-fit temperature says about the model, in words that stay true for any value.
+///
+/// Written out rather than fixed in the template: the verdict is regenerated with every run, and
+/// a sentence that only fits one outcome turns false the first time another model wins.
+fn calibration_reading(best_t: f64) -> &'static str {
+    // The grid steps by 0.05, so anything this close to 1 is 1 within the fit's resolution.
+    if (best_t - 1.0).abs() <= 0.1 {
+        "that is close enough to 1 that the model's own probabilities can be taken as they are"
+    } else if best_t < 1.0 {
+        "a value below 1 means the model is *under*confident and would need sharpening rather \
+         than flattening"
+    } else {
+        "a value above 1 means the model is *over*confident and its probabilities need \
+         flattening before they mean anything"
+    }
+}
+
 fn render(reports: &[Report], dataset: &Dataset, reference: Option<&str>) -> String {
     let mut out = String::new();
     out.push_str("# Model selection\n\n");
@@ -546,25 +581,25 @@ fn render(reports: &[Report], dataset: &Dataset, reference: Option<&str>) -> Str
     if let Some(winner) = pick_winner(reports, reference) {
         out.push_str(&format!(
             "\n## Verdict\n\n\
-             **`{}`** — the most accurate model that answered every case with a usable label, \
-             ties broken by median latency.\n\n\
+             **`{}`** — the most accurate model whose most likely token was an offered letter \
+             in every case, ties broken by median latency.\n\n\
              Set it as the default with `CERNO_DEFAULT_MODEL={}`. Its best-fit calibration \
-             temperature above is {:.2}; a value below 1 means the model is slightly *under*\
-             confident and would need sharpening rather than flattening. cerno ships a default of \
-             1.0 either way — {} labelled cases is thin evidence for baking in an adjustment, and \
-             callers can always pass their own.\n",
+             temperature above is {:.2}; {}. cerno ships a default of 1.0 either way — {} \
+             labelled cases is thin evidence for baking in an adjustment, and callers can always \
+             pass their own.\n",
             winner.model,
             winner.model,
             winner.best_t,
+            calibration_reading(winner.best_t),
             dataset.cases.len(),
         ));
     }
 
     out.push_str(
         "\n## Reading the table\n\n\
-         - **Fidelity** — share of cases answered with one of the offered letters. This is a gate,\n  \
-           not a score: below 100% the model is ignoring the instruction on some inputs, and no\n  \
-           amount of accuracy makes up for an answer cerno cannot read.\n\
+         - **Fidelity** — share of cases whose most likely first token was one of the offered\n  \
+           letters. This is a gate, not a score: below 100% the model is ignoring the instruction\n  \
+           on some inputs, and cerno then reads its answer off tokens it was not going to write.\n\
          - **Accuracy** — share of cases where the picked label was the labelled one. Score cases\n  \
            allow the per-case tolerance in the dataset.\n\
          - **p50 / p99** — wall-clock per question, warm model, one question per request.\n\
@@ -629,6 +664,33 @@ mod tests {
     }
 
     /// A value wider than its header must widen the column, not overflow it.
+    /// A letter further down the ranking is enough for an answer, not for fidelity.
+    #[test]
+    fn only_a_label_at_the_top_is_faithful() {
+        let offered = ["A".to_string(), "B".to_string()];
+        let ranked = |tokens: &[(&str, f64)]| -> Vec<(String, f64)> {
+            tokens.iter().map(|(t, l)| (t.to_string(), *l)).collect()
+        };
+
+        assert!(top_token_is_a_label(
+            &ranked(&[(" b", -0.1), ("A", -3.0)]),
+            offered.iter()
+        ));
+        assert!(!top_token_is_a_label(
+            &ranked(&[("**", -0.01), ("A", -8.0)]),
+            offered.iter()
+        ));
+        assert!(!top_token_is_a_label(&[], offered.iter()));
+    }
+
+    /// The verdict is regenerated every run, so its sentence must fit whichever value comes out.
+    #[test]
+    fn the_calibration_reading_follows_the_temperature() {
+        assert!(calibration_reading(0.8).contains("*under*confident"));
+        assert!(calibration_reading(3.2).contains("*over*confident"));
+        assert!(calibration_reading(1.05).contains("close enough to 1"));
+    }
+
     #[test]
     fn a_long_cell_widens_its_column() {
         let table = markdown_table(&["T"], &[vec!["a-very-long-value".into()]]);
