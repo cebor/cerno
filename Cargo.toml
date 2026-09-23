@@ -36,7 +36,9 @@ tower-http = { version = "0.7", features = ["trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 utoipa = { version = "5", features = ["axum_extras"] }
-utoipa-swagger-ui = { version = "9", features = ["axum"] }
+# vendored: otherwise its build script downloads Swagger UI from GitHub, so `cargo install
+# cerno-server` would need network access at build time and fetch an unpinned archive.
+utoipa-swagger-ui = { version = "9", features = ["axum", "vendored"] }
 toml = "0.9"
 
 mockito = "1"
