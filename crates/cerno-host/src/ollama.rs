@@ -135,10 +135,13 @@ impl OllamaHost {
 /// Whether a failed response is Ollama complaining that the model has no thinking mode.
 ///
 /// Models without a reasoning preamble reject `think` outright, so the same request has to go
-/// out again without the field. Only the message distinguishes this from a real failure.
+/// out again without the field. Only the message distinguishes this from a real failure, so it
+/// has to say both that something is unsupported and that it is thinking: a 404 for a model
+/// named `deepthinker` "does not exist", and a looser match would remember that model as unable
+/// to think and stop sending `think: false` to it for good.
 fn rejects_thinking(body: &str) -> bool {
     let lower = body.to_ascii_lowercase();
-    lower.contains("think") && (lower.contains("support") || lower.contains("does not"))
+    lower.contains("not support") && lower.contains("thinking")
 }
 
 #[async_trait]
@@ -320,6 +323,9 @@ mod tests {
             r#"{"error":"registry.ollama.ai/library/x does not support thinking"}"#
         ));
         assert!(!rejects_thinking(r#"{"error":"model not found"}"#));
+        assert!(!rejects_thinking(
+            r#"{"error":"model \"deepthinker\" does not exist"}"#
+        ));
     }
 
     /// The sampling options are the whole reason the distribution is readable; pin them so a
