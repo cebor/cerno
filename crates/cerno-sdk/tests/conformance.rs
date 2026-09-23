@@ -332,6 +332,12 @@ async fn a_response_can_be_wrapped_without_going_over_the_network() {
 /// All three SDKs agree: a service that cannot be reached is not up, rather than an error.
 #[tokio::test]
 async fn health_is_false_when_the_service_cannot_be_reached() {
-    // Port 9 is discard; nothing listens there, so the connection is refused at once.
-    assert!(!client("http://127.0.0.1:9").health().await);
+    // Bind then drop, so the port is known to be closed. A fixed port such as 9 is not: behind
+    // some sandboxes and firewalls the connection attempt hangs until it times out instead of
+    // being refused, and this test took 30 s to pass.
+    let closed = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap()
+    };
+    assert!(!client(&format!("http://{closed}")).health().await);
 }
