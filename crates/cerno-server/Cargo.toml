@@ -3,6 +3,9 @@ name = "cerno-server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "HTTP service answering noul, choice and score questions against a locally hosted model"
+repository.workspace = true
+readme.workspace = true
 # The package also ships `cerno-openapi`, which writes the spec. Without this, `cargo run -p
 # cerno-server` is ambiguous and fails rather than starting the service.
 default-run = "cerno-server"

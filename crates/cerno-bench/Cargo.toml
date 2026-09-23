@@ -3,6 +3,9 @@ name = "cerno-bench"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+# The benchmark needs a live model and its dataset; it is not a library anyone installs.
+publish = false
 
 [dependencies]
 cerno-types = { workspace = true }

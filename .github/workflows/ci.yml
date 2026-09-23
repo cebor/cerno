@@ -7,8 +7,9 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
+  # Tags run these through release.yml, which publishes only once they pass.
+  workflow_call:
 
 permissions:
   contents: read

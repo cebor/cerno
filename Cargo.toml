@@ -15,12 +15,15 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/cebor/cerno"
+readme = "README.md"
 
 [workspace.dependencies]
-cerno-types = { path = "crates/cerno-types" }
-cerno-host = { path = "crates/cerno-host" }
-cerno-core = { path = "crates/cerno-core" }
-cerno-sdk = { path = "crates/cerno-sdk" }
+# crates.io sees the versions, not the paths. Exact, because every crate is released at the one
+# workspace version; scripts/release.sh bumps them together with it.
+cerno-types = { path = "crates/cerno-types", version = "=0.1.0" }
+cerno-host = { path = "crates/cerno-host", version = "=0.1.0" }
+cerno-core = { path = "crates/cerno-core", version = "=0.1.0" }
+cerno-sdk = { path = "crates/cerno-sdk", version = "=0.1.0" }
 
 axum = "0.8"
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }

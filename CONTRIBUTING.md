@@ -229,14 +229,15 @@ changes it:
 
 ```bash
 scripts/release.sh 0.2.0
-git push origin main v0.2.0
+git push origin main v0.2.0 && git push github main v0.2.0
 ```
 
 On a clean `main` it collects the `Changelog:` trailers since the last tag into a new
-`CHANGELOG.md` section. It then raises the version in `Cargo.toml`, `pyproject.toml`, the Python
-`__version__` and `package.json`, and updates the three lockfiles and `spec/openapi.json` to
-match. It commits that as `Release 0.2.0` and creates the annotated tag `v0.2.0`, with the
-section as the tag message. It never pushes.
+`CHANGELOG.md` section. It then raises the version in `Cargo.toml` (the workspace's and the
+pinned `cerno-*` dependencies'), `pyproject.toml`, the Python `__version__` and `package.json`,
+and updates the three lockfiles and `spec/openapi.json` to match. It commits that as `Release
+0.2.0` and creates the annotated tag `v0.2.0`, with the section as the tag message. It never
+pushes.
 
 It stops before changing anything if a trailer has an unknown value, if nothing user-visible
 happened since the last tag, or if the version is not above the last one. It also stops if the
@@ -245,6 +246,13 @@ places listed above already disagree with each other.
 To reword the generated entries, let the script write the section, commit the edited
 `CHANGELOG.md`, delete the tag and the `Release` commit it made, and run it again. A section
 that already exists for the version is used as written.
+
+Pushing the tag to GitHub runs `.github/workflows/release.yml`: the CI suites again, then
+`cargo publish --workspace` to crates.io (everything but `cerno-bench`), `cerno-sdk` to PyPI and
+`cerno-sdk` to npm. The three publish jobs run in the `release` environment and authenticate by
+trusted publishing. `CARGO_REGISTRY_TOKEN` on that environment is only there for the first
+release, before crates.io can have a trusted publisher; the npm package was published by hand
+the first time, and the npm job skips a version that is already there.
 
 ## License
 

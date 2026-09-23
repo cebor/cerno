@@ -3,6 +3,9 @@ name = "cerno-host"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Model hosts for cerno: next-token logprobs from Ollama and OpenAI-compatible runtimes"
+repository.workspace = true
+readme.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }

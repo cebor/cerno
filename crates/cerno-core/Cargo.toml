@@ -3,6 +3,9 @@ name = "cerno-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "The cerno engine: noul, choice and score from one token's logprobs"
+repository.workspace = true
+readme.workspace = true
 
 [dependencies]
 cerno-types = { workspace = true }

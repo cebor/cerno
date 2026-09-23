@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "description": "TypeScript client for cerno — noul, choice and score against a locally hosted model",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cebor/cerno.git",
+    "directory": "sdks/typescript"
+  },
   "type": "module",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",

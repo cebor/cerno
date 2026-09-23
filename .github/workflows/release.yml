@@ -1,0 +1,100 @@
+# Publishes a tag made by scripts/release.sh to crates.io, PyPI and npm, once the same suites
+# as CI have passed on it.
+#
+# Every registry is set up for trusted publishing, so in the end no job needs a secret. Two of
+# them cannot start that way: crates.io and npm only accept a trusted publisher for a package
+# that already exists. For crates.io, CARGO_REGISTRY_TOKEN on the `release` environment carries
+# the first release; delete it once the trusted publisher is in place. The npm package was
+# published by hand the first time, which is why that job skips a version already there.
+# PyPI takes a pending publisher before the first upload and never needs a token.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # A tag pushed by hand, not by the release script, would publish whatever version the
+      # manifests happen to hold.
+      - name: The tag matches the workspace version
+        run: |
+          version=$(sed -n '/^\[workspace\.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' Cargo.toml)
+          [[ $GITHUB_REF_NAME == "v$version" ]] ||
+            { echo "::error::tag $GITHUB_REF_NAME, but Cargo.toml is at $version"; exit 1; }
+
+  crates:
+    needs: [ci, version]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+        if: env.CARGO_REGISTRY_TOKEN == ''
+      # In dependency order; cerno-bench is publish = false and skipped.
+      - run: cargo publish --workspace --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ env.CARGO_REGISTRY_TOKEN || steps.auth.outputs.token }}
+
+  pypi:
+    needs: [ci, version]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: sdks/python
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: uv build
+      - run: uv publish --trusted-publishing always
+
+  npm:
+    needs: [ci, version]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: sdks/typescript
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24 # npm 11, which does trusted publishing
+          registry-url: https://registry.npmjs.org
+      - name: Skip a version already on npm
+        id: published
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          if npm view "cerno-sdk@$version" version | grep -q .; then
+            echo "::notice::cerno-sdk@$version is already on npm"
+            echo "skip=true" >>"$GITHUB_OUTPUT"
+          fi
+      - run: npm ci
+        if: steps.published.outputs.skip != 'true'
+      # prepublishOnly builds both module formats.
+      - run: npm publish --access public --provenance
+        if: steps.published.outputs.skip != 'true'

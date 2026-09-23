@@ -47,6 +47,7 @@ fi
 versions() {
     echo "Cargo.toml $($sed -n '/^\[workspace\.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' Cargo.toml)"
     awk '/^name = "cerno-/ { name = $3; getline; gsub(/"/, "", $3); print "Cargo.lock:" name, $3 }' Cargo.lock
+    $sed -n 's/^\(cerno-[a-z]*\) = { path = .*, version = "=\(.*\)" }$/Cargo.toml:\1 \2/p' Cargo.toml
     echo "pyproject.toml $($sed -n '0,/^version = / s/^version = "\(.*\)"/\1/p' sdks/python/pyproject.toml)"
     echo "__init__.py $($sed -n 's/^__version__ = "\(.*\)"/\1/p' sdks/python/src/cerno/__init__.py)"
     awk '/^name = "cerno-sdk"$/ { getline; gsub(/"/, "", $3); print "uv.lock", $3 }' sdks/python/uv.lock
@@ -177,6 +178,7 @@ fi
 if [[ $version != "$current" ]]; then
     trap 'echo "release: failed while bumping; git restore . puts everything back" >&2' ERR
     $sed -i "/^\[workspace\.package\]/,/^\[/ s/^version = \".*\"/version = \"$version\"/" Cargo.toml
+    $sed -i "s/^\(cerno-[a-z]* = { path = .*, version = \"=\).*\(\" }\)$/\1$version\2/" Cargo.toml
     $sed -i "0,/^version = / s/^version = \".*\"/version = \"$version\"/" sdks/python/pyproject.toml
     $sed -i "s/^__version__ = \".*\"/__version__ = \"$version\"/" sdks/python/src/cerno/__init__.py
     # Not `npm version`: it reformats package.json, expanding every inline array and object.

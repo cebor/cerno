@@ -3,6 +3,9 @@ name = "cerno-tui"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Terminal front end for cerno"
+repository.workspace = true
+readme.workspace = true
 
 [dependencies]
 cerno-sdk = { workspace = true }

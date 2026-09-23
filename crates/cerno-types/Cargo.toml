@@ -3,6 +3,9 @@ name = "cerno-types"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Wire types shared by the cerno service and its Rust client"
+repository.workspace = true
+readme.workspace = true
 
 [features]
 default = []
