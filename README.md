@@ -20,21 +20,26 @@ curl localhost:3000/v1/systemone -H 'content-type: application/json' -d '{
   "questions": [
     {"id": "urgent", "noul": "Ist das dringend?"},
     {"id": "team", "choice": {"question": "Welches Team?", "options": ["IT", "Facility", "HR"]}},
-    {"id": "sev",  "score":  {"question": "Wie schwer?", "levels": 5}}
+    {"id": "sev",  "score":  {"question": "Wie schwer?",
+                           "levels": ["unkritisch", "gering", "mittel", "hoch", "kritisch"]}}
   ]}'
 ```
 
 ```json
 {"answers": {
-   "urgent": {"type": "noul",   "noul": 0.9911, "truncated": false},
-   "team":   {"type": "choice", "choice": "Facility", "index": 1, "confidence": 0.939},
-   "sev":    {"type": "score",  "score": 5, "expected_score": 4.88, "legend": "5"}},
+   "urgent": {"type": "noul",   "noul": 0.9834, "truncated": false},
+   "team":   {"type": "choice", "choice": "Facility", "index": 1,
+              "confidence": 0.978, "truncated": false},
+   "sev":    {"type": "score",  "score": 5, "expected_score": 4.80, "legend": "kritisch",
+              "confidence": 0.692, "truncated": false}},
  "model": "gemma4:e2b-it-qat",
- "usage": {"input_tokens": 329, "questions": 3},
- "timing_ms": {"total": 144}}
+ "usage": {"input_tokens": 297, "questions": 3},
+ "timing_ms": {"total": 96}}
 ```
 
-Three questions, 144 ms, on a 4 GB model.
+Trimmed: every answer also carries `raw_logprobs` and `truncated_labels`, and a choice or score
+its `probabilities`.
+Three questions, 96 ms, on a 4 GB model.
 
 ## How it works
 
