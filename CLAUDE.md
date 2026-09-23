@@ -209,6 +209,14 @@ instead — `pty.openpty`, `TIOCSWINSZ` for a real size, write keys on a schedul
 ANSI stream into a grid to read the final screen. Without the window size the program draws
 nothing at all and the capture is empty.
 
+## One version, changed only by the release script
+
+The crates, both SDKs and `spec/openapi.json` all carry the same version. `scripts/release.sh
+<version>` is the only thing that changes it. It also writes the `CHANGELOG.md` section from the
+`Changelog:` trailers and creates the tag. Do not bump a version by hand: the script refuses to
+run once the places it checks disagree. The spec's version comes from `CARGO_PKG_VERSION`, so a
+hand bump without regenerating the spec also fails `the_checked_in_spec_matches_the_code`.
+
 ## Host ceilings
 
 Every adapter reports `max_top_logprobs: 20` today. llama.cpp's own ceiling is higher, which is

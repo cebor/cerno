@@ -195,6 +195,30 @@ the right place.
 The history before this convention has no trailers, so everything up to and including 0.1.0 is
 summarised by hand.
 
+## Releasing
+
+Every subproject carries the same version, and `scripts/release.sh` is the only thing that
+changes it:
+
+```bash
+scripts/release.sh 0.2.0
+git push origin main v0.2.0
+```
+
+On a clean `main` it collects the `Changelog:` trailers since the last tag into a new
+`CHANGELOG.md` section. It then raises the version in `Cargo.toml`, `pyproject.toml`, the Python
+`__version__` and `package.json`, and updates the three lockfiles and `spec/openapi.json` to
+match. It commits that as `Release 0.2.0` and creates the annotated tag `v0.2.0`, with the
+section as the tag message. It never pushes.
+
+It stops before changing anything if a trailer has an unknown value, if nothing user-visible
+happened since the last tag, or if the version is not above the last one. It also stops if the
+places listed above already disagree with each other.
+
+To reword the generated entries, let the script write the section, commit the edited
+`CHANGELOG.md`, delete the tag and the `Release` commit it made, and run it again. A section
+that already exists for the version is used as written.
+
 ## License
 
 cerno is MIT-licensed. By contributing you agree that your contribution is released under the
