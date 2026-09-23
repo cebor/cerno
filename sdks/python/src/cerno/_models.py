@@ -28,8 +28,19 @@ class ApiError(CernoError):
         self.question_id = question_id
 
 
+class TransportError(CernoError):
+    """The service could not be reached, or did not answer in time.
+
+    The underlying ``httpx`` exception is kept as ``__cause__``.
+    """
+
+
 class UnexpectedResponse(CernoError):
-    """A non-2xx response that was not shaped like a cerno error — a proxy, most likely."""
+    """A response that was not shaped like anything cerno sends — a proxy, most likely.
+
+    Raised for a non-2xx body that is not a cerno error, and for a 2xx body that is not a cerno
+    answer.
+    """
 
     def __init__(self, status: int, body: str):
         super().__init__(f"cerno returned {status}: {body[:200]}")

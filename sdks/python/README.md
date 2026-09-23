@@ -80,5 +80,7 @@ except ApiError as err:
     err.question_id  # "team"
 ```
 
-`UnexpectedResponse` is raised instead when a non-2xx body is not a cerno error at all, which
-usually means a proxy between you and the service.
+`UnexpectedResponse` is raised instead when a body is not something cerno sends — a non-2xx
+that is not a cerno error, or a 2xx that is not an answer — which usually means a proxy between
+you and the service. `TransportError` means the service could not be reached or timed out; the
+`httpx` exception is its `__cause__`. All three derive from `CernoError`.

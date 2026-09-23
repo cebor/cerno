@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 
 from ._builder import SystemOneBuilder
-from ._models import Answers, ApiError, UnexpectedResponse
+from ._models import Answers, ApiError, TransportError, UnexpectedResponse
 
 DEFAULT_TIMEOUT = 60.0
 
@@ -15,7 +15,10 @@ DEFAULT_TIMEOUT = 60.0
 def _decode(response: httpx.Response) -> Any:
     """Turn a response into data, or into the most specific error we can justify."""
     if response.is_success:
-        return response.json()
+        try:
+            return response.json()
+        except ValueError:
+            raise UnexpectedResponse(response.status_code, response.text) from None
 
     try:
         body = response.json()
@@ -30,6 +33,15 @@ def _decode(response: httpx.Response) -> Any:
         message=body.get("message", ""),
         question_id=body.get("question_id"),
     )
+
+
+def _answers(response: httpx.Response) -> Answers:
+    """Read a response as answers. A 2xx body in some other shape is not ours to interpret."""
+    data = _decode(response)
+    try:
+        return Answers(data)
+    except (KeyError, TypeError, AttributeError):
+        raise UnexpectedResponse(response.status_code, response.text) from None
 
 
 class Client:
@@ -57,12 +69,19 @@ class Client:
         return SystemOneBuilder(state, self._send)
 
     def _send(self, body: dict[str, Any]) -> Answers:
-        response = self._http.post(f"{self.base_url}/v1/systemone", json=body)
-        return Answers(_decode(response))
+        try:
+            response = self._http.post(f"{self.base_url}/v1/systemone", json=body)
+        except httpx.HTTPError as error:
+            raise TransportError(f"could not reach cerno: {error}") from error
+        return _answers(response)
 
     def models(self) -> dict[str, Any]:
         """The models this service will answer for."""
-        return _decode(self._http.get(f"{self.base_url}/v1/models"))
+        try:
+            response = self._http.get(f"{self.base_url}/v1/models")
+        except httpx.HTTPError as error:
+            raise TransportError(f"could not reach cerno: {error}") from error
+        return _decode(response)
 
     def health(self) -> bool:
         try:
@@ -98,11 +117,18 @@ class AsyncClient:
         return SystemOneBuilder(state, self._send)
 
     async def _send(self, body: dict[str, Any]) -> Answers:
-        response = await self._http.post(f"{self.base_url}/v1/systemone", json=body)
-        return Answers(_decode(response))
+        try:
+            response = await self._http.post(f"{self.base_url}/v1/systemone", json=body)
+        except httpx.HTTPError as error:
+            raise TransportError(f"could not reach cerno: {error}") from error
+        return _answers(response)
 
     async def models(self) -> dict[str, Any]:
-        return _decode(await self._http.get(f"{self.base_url}/v1/models"))
+        try:
+            response = await self._http.get(f"{self.base_url}/v1/models")
+        except httpx.HTTPError as error:
+            raise TransportError(f"could not reach cerno: {error}") from error
+        return _decode(response)
 
     async def health(self) -> bool:
         try:
