@@ -13,6 +13,7 @@ export {
   ApiError,
   CernoError,
   MissingAnswer,
+  TransportError,
   UnexpectedResponse,
   WrongAnswerType,
 } from "./errors.ts";

@@ -87,7 +87,9 @@ try {
 ```
 
 `UnexpectedResponse` is thrown instead when a non-2xx body is not a cerno error at all, which
-usually means a proxy between you and the service.
+usually means a proxy between you and the service. `TransportError` means the service could not
+be reached or did not answer within `timeoutMs`; the original error is its `cause`. All three
+extend `CernoError`.
 
 ## Options
 

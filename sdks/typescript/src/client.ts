@@ -1,6 +1,6 @@
 import { Answers } from "./answers.ts";
 import { SystemOneBuilder } from "./builder.ts";
-import { ApiError, UnexpectedResponse } from "./errors.ts";
+import { ApiError, TransportError, UnexpectedResponse } from "./errors.ts";
 import type {
   ErrorResponse,
   ModelsResponse,
@@ -74,17 +74,22 @@ export class Client {
     // An explicit abort, so a wedged host surfaces as a timeout rather than hanging forever.
     const abort = AbortSignal.timeout(this.timeoutMs);
 
-    const response = await this.doFetch(`${this.baseUrl}${path}`, {
-      method,
-      signal: abort,
-      headers: {
-        ...(body === undefined ? {} : { "content-type": "application/json" }),
-        ...this.headers,
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-
-    const text = await response.text();
+    let response: Response;
+    let text: string;
+    try {
+      response = await this.doFetch(`${this.baseUrl}${path}`, {
+        method,
+        signal: abort,
+        headers: {
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+          ...this.headers,
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      text = await response.text();
+    } catch (err) {
+      throw new TransportError(`could not reach cerno: ${String(err)}`, err);
+    }
 
     if (response.ok) {
       try {

@@ -21,6 +21,17 @@ export class ApiError extends CernoError {
   }
 }
 
+/**
+ * The service could not be reached, or did not answer within the timeout. The error `fetch`
+ * threw is kept as `cause`.
+ */
+export class TransportError extends CernoError {
+  constructor(message: string, cause: unknown) {
+    super(message, { cause });
+    this.name = "TransportError";
+  }
+}
+
 /** A non-2xx response that was not shaped like a cerno error — a proxy, most likely. */
 export class UnexpectedResponse extends CernoError {
   readonly status: number;
