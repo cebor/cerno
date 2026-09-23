@@ -84,3 +84,7 @@ except ApiError as err:
 that is not a cerno error, or a 2xx that is not an answer — which usually means a proxy between
 you and the service. `TransportError` means the service could not be reached or timed out; the
 `httpx` exception is its `__cause__`. All three derive from `CernoError`.
+
+The builder refuses two easy mistakes with a `TypeError` before anything is sent: a string where
+the options belong (`.choice("team", "Which team?")` would otherwise ask about eleven single
+letters), and a string or `bool` as a score rubric.

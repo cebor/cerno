@@ -47,10 +47,18 @@ class SystemOneBuilder:
         if options is None:
             options, question = question, None  # type: ignore[assignment]
 
+        # A string is iterable, so a forgotten options list would otherwise be sent as one
+        # option per character — and the service would answer it.
+        if isinstance(options, str) or options is None:
+            raise TypeError(
+                f"choice {question_id!r} needs a list of options, got {type(options).__name__}; "
+                "pass the question and then the options, or the options alone"
+            )
+
         spec: dict[str, Any] = {}
         if question is not None:
             spec["question"] = question
-        spec["options"] = list(options or [])
+        spec["options"] = list(options)
 
         self._body["questions"].append({"id": question_id, "choice": spec})
         return self
@@ -62,6 +70,13 @@ class SystemOneBuilder:
         levels: int | Sequence[str],
     ) -> "SystemOneBuilder":
         """A position on a rubric: an int for generated levels, or the level texts."""
+        # bool is an int subclass, and a str is a sequence of characters; neither is a rubric.
+        if isinstance(levels, bool) or isinstance(levels, str):
+            raise TypeError(
+                f"score {question_id!r} needs a level count or a list of level texts, "
+                f"got {type(levels).__name__}"
+            )
+
         spec: dict[str, Any] = {"question": question}
         spec["levels"] = levels if isinstance(levels, int) else list(levels)
 
