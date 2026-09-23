@@ -193,6 +193,29 @@ A breaking change to the wire format or an SDK's public API is `changed` or `rem
 body says what callers have to do. `git commit --trailer "Changelog: fixed"` adds the line in
 the right place.
 
+Each entry starts with the subprojects it concerns, such as `**Service, Python:**`. These are
+read from the paths the commit changes:
+
+| Paths | Subproject |
+|---|---|
+| `crates/cerno-server`, `-core`, `-host`, `-types`, `spec/` | Service |
+| `crates/cerno-sdk` | Rust |
+| `sdks/python` | Python |
+| `sdks/typescript` | TypeScript |
+| `crates/cerno-tui` | TUI |
+
+Other paths (docs, CI, `cerno-bench`) count for none. When the paths claim too much, for
+example a service change that only adjusts an SDK's error mapping to match, say so with a
+second trailer, and the paths are then ignored:
+
+```bash
+git commit --trailer "Changelog: fixed" --trailer "Changelog-Scope: service"
+```
+
+`Changelog-Scope` takes one or more of `service`, `rust`, `python`, `typescript` and `tui`,
+separated by commas. A commit with a `Changelog` trailer that touches none of these paths
+needs a `Changelog-Scope`; the release script stops without one.
+
 The history before this convention has no trailers, so everything up to and including 0.1.0 is
 summarised by hand.
 

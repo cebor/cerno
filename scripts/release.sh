@@ -85,22 +85,70 @@ section_of() {
     ' CHANGELOG.md
 }
 
+readonly all_scopes="service rust python typescript tui"
+
+# Prints the scopes whose files commit $1 touches, one per line. Docs, CI, the benchmark and
+# the lockfiles belong to none.
+scopes_of() {
+    git show --name-only --format= "$1" | while read -r path; do
+        case $path in
+            crates/cerno-server/* | crates/cerno-core/* | crates/cerno-host/* | \
+                crates/cerno-types/* | spec/*) echo service ;;
+            crates/cerno-sdk/*) echo rust ;;
+            sdks/python/*) echo python ;;
+            sdks/typescript/*) echo typescript ;;
+            crates/cerno-tui/*) echo tui ;;
+        esac
+    done
+}
+
+# Turns scopes, one per line and in any order, into "Service, Python" in the fixed order.
+scope_names() {
+    local found=$1 scope names=""
+    for scope in $all_scopes; do
+        grep -qx "$scope" <<<"$found" || continue
+        case $scope in
+            service) scope=Service ;;
+            rust) scope=Rust ;;
+            python) scope=Python ;;
+            typescript) scope=TypeScript ;;
+            tui) scope=TUI ;;
+        esac
+        names+="${names:+, }$scope"
+    done
+    echo "$names"
+}
+
 if grep -qF "## [$version]" CHANGELOG.md; then
     echo "Using the section for $version already in CHANGELOG.md."
 else
     entries=""
     range=${last_tag:+$last_tag..}HEAD
-    while IFS=$'\x1f' read -r -d $'\x1e' hash subject kinds; do
+    while IFS=$'\x1f' read -r -d $'\x1e' hash subject kinds scope_trailer; do
         hash=${hash//$'\n'/}
         kinds=${kinds//$'\n'/}
+        scope_trailer=${scope_trailer//$'\n'/}
         [[ -n $kinds ]] || continue
         [[ $kinds != *,* ]] || die "$hash has more than one Changelog trailer: $kinds"
         case $kinds in
             added | changed | deprecated | removed | fixed | security | performance) ;;
             *) die "$hash has an unknown Changelog trailer '$kinds' (see CONTRIBUTING.md)" ;;
         esac
-        entries+="$kinds - $subject ($hash)"$'\n'
-    done < <(git log --reverse --format='%h%x1f%s%x1f%(trailers:key=Changelog,valueonly,separator=%x2C)%x1e' "$range")
+
+        # Changelog-Scope overrides the paths, for a change that only adjusts its neighbours.
+        if [[ -n $scope_trailer ]]; then
+            scopes=$(tr ',' '\n' <<<"$scope_trailer" | tr -d ' \t' | tr '[:upper:]' '[:lower:]')
+            while read -r scope; do
+                [[ " $all_scopes " == *" $scope "* ]] ||
+                    die "$hash has an unknown Changelog-Scope '$scope' (one of: $all_scopes)"
+            done <<<"$scopes"
+        else
+            scopes=$(scopes_of "$hash")
+            [[ -n $scopes ]] ||
+                die "$hash touches no subproject; add a Changelog-Scope trailer (one of: $all_scopes)"
+        fi
+        entries+="$kinds - **$(scope_names "$scopes"):** $subject ($hash)"$'\n'
+    done < <(git log --reverse --format='%h%x1f%s%x1f%(trailers:key=Changelog,valueonly,separator=%x2C)%x1f%(trailers:key=Changelog-Scope,valueonly,separator=%x2C)%x1e' "$range")
 
     section="## [$version] - $(date +%F)"$'\n'
     for kind in Added Changed Deprecated Removed Fixed Security Performance; do
