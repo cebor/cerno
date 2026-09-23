@@ -47,9 +47,11 @@ distribution* over it. `P(A)`, `P(B)`, `P(C)` are all there, in one forward pass
 number of options.
 
 ```
-question ──> options ──> labels A,B,C ──> prompt ──> model ──> distribution over one token
-                                                                          │
-                       typed answer <── calibrate <── fold variants, floor ┘
+question ──> options ──> labels A,B,C ──> prompt ──> model
+                                                       │
+                                          distribution over one token
+                                                       │
+typed answer <── calibrate <── fold variants, floor <──┘
 ```
 
 That is where the speed comes from — one token, not a sentence — and where the probabilities
@@ -121,16 +123,16 @@ Started above. It points at `http://localhost:3000` unless `--url` or `CERNO_URL
 otherwise.
 
 ```
-┌ State (1) ───────────────────────┐┌ Answers ─────────────────────────────┐
+┌ State (1) ───────────────────────┐┌ Answers ──────────────────────────────┐
 │Ticket: Serverraum-Klima          ││sev      score → 5 "kritisch" conf 0.69│
 │ausgefallen, 31 Grad und steigend.││          expected 4.80                │
-└──────────────────────────────────┘│  1 unkritisch▎░░░░░░░░░░░░░░░░░  0.9% │
+└──────────────────────────────────┘│  1 unkritisch░░░░░░░░░░░░░░░░░░  0.9% │
 ┌ Questions (2) ───────────────────┐│  4 hoch      ██░░░░░░░░░░░░░░░░  8.2% │
 │  urgent    noul   Ist das dring… ││  5 kritisch  █████████████████░ 87.6% │
 │  team      choice IT | Facility  ││                                       │
-│▸ sev       score  unkritisch | … ││team     choice → Facility   conf 0.965│
+│> sev       score  unkritisch | … ││team     choice → Facility   conf 0.965│
 │  + add question  (a)             ││  IT          ░░░░░░░░░░░░░░░░░░  0.2% │
-│                                  ││  Facility    █████████████████▉ 99.4% │
+│                                  ││  Facility    ██████████████████ 99.4% │
 └──────────────────────────────────┘└───────────────────────────────────────┘
  localhost:3000 ● · default model · ^S send · ? help
 ```
