@@ -12,6 +12,7 @@ where each one is written up in full.
 | Python | 3.10+, with [uv](https://docs.astral.sh/uv/) |
 | Node | recent enough to run `.ts` files directly (22.18+ or 23.6+) — the tests have no build step |
 | Ollama | only for live checks; nothing in the test suites needs it |
+| GNU sed | only for `scripts/release.sh`; on macOS `brew install gnu-sed`, which the script finds as `gsed` |
 
 ```bash
 cargo test --workspace
