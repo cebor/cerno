@@ -250,9 +250,13 @@ that already exists for the version is used as written.
 Pushing the tag to GitHub runs `.github/workflows/release.yml`: the CI suites again, then
 `cargo publish --workspace` to crates.io (everything but `cerno-bench`), `cerno-sdk` to PyPI and
 `cerno-sdk` to npm. The three publish jobs run in the `release` environment and authenticate by
-trusted publishing. `CARGO_REGISTRY_TOKEN` on that environment is only there for the first
-release, before crates.io can have a trusted publisher; the npm package was published by hand
-the first time, and the npm job skips a version that is already there.
+trusted publishing, so no token is stored anywhere. Every job skips what is already published,
+so a run that failed halfway can be re-run as it is.
+
+A new crate or npm package cannot be published this way the first time: crates.io and npm only
+accept a trusted publisher for a package that already exists. Publish it once by hand, add
+`cebor/cerno`, `release.yml` and the `release` environment as its trusted publisher, and the
+workflow takes it from there.
 
 ## License
 

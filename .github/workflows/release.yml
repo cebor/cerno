@@ -1,12 +1,9 @@
 # Publishes a tag made by scripts/release.sh to crates.io, PyPI and npm, once the same suites
 # as CI have passed on it.
 #
-# Every registry is set up for trusted publishing, so in the end no job needs a secret. Two of
-# them cannot start that way: crates.io and npm only accept a trusted publisher for a package
-# that already exists. For crates.io, CARGO_REGISTRY_TOKEN on the `release` environment carries
-# the first release; delete it once the trusted publisher is in place. The npm package was
-# published by hand the first time. PyPI takes a pending publisher before the first upload and
-# never needs a token.
+# Every registry authenticates by trusted publishing, in the `release` environment, so no job
+# needs a secret. crates.io and npm only accept a trusted publisher for a package that already
+# exists, so a new crate or package goes out by hand once before this workflow can publish it.
 #
 # Every job skips what is already published, so a run that failed halfway can be re-run as it
 # is.
@@ -43,14 +40,11 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    env:
-      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: rust-lang/crates-io-auth-action@v1
         id: auth
-        if: env.CARGO_REGISTRY_TOKEN == ''
       # In dependency order; cerno-bench is publish = false and skipped. A crate whose version
       # is already out is excluded, because cargo refuses the whole run over one, so a job that
       # failed halfway (crates.io rate-limits new crates) could otherwise never be re-run.
@@ -66,7 +60,7 @@ jobs:
             jq -r '.packages[] | select(.publish != []) | "\(.name) \(.version)"')
           cargo publish --workspace --locked "${exclude[@]}"
         env:
-          CARGO_REGISTRY_TOKEN: ${{ env.CARGO_REGISTRY_TOKEN || steps.auth.outputs.token }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 
   pypi:
     needs: [ci, version]
