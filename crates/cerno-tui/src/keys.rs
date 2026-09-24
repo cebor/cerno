@@ -76,7 +76,29 @@ pub fn handle(app: &mut App, key: KeyEvent) -> Action {
     handle_shortcut(app, key)
 }
 
+/// Lines a page key moves the answers pane.
+const PAGE: i32 = 10;
+
 fn handle_shortcut(app: &mut App, key: KeyEvent) -> Action {
+    // The answers pane has one job, being read, so the list's keys scroll it there rather than
+    // moving, editing or deleting a question that is not what has focus.
+    if app.focus == Focus::Answers {
+        let scrolled = match key.code {
+            KeyCode::Up | KeyCode::Char('k') => Some(-1),
+            KeyCode::Down | KeyCode::Char('j') => Some(1),
+            KeyCode::PageUp => Some(-PAGE),
+            KeyCode::PageDown | KeyCode::Char(' ') => Some(PAGE),
+            KeyCode::Home | KeyCode::Char('g') => Some(i32::MIN / 2),
+            KeyCode::End | KeyCode::Char('G') => Some(i32::MAX / 2),
+            KeyCode::Char('a' | 'e' | 'd') | KeyCode::Enter => Some(0),
+            _ => None,
+        };
+        if let Some(lines) = scrolled {
+            app.scroll_answers(lines);
+            return Action::None;
+        }
+    }
+
     match key.code {
         KeyCode::Char('q') => return Action::Quit,
         KeyCode::Char('?') => app.show_help = true,
@@ -108,6 +130,7 @@ fn handle_shortcut(app: &mut App, key: KeyEvent) -> Action {
 
         KeyCode::Char('1') => app.focus = Focus::State,
         KeyCode::Char('2') => app.focus = Focus::Questions,
+        KeyCode::Char('3') => app.focus = Focus::Answers,
 
         _ => {}
     }
@@ -363,7 +386,35 @@ mod tests {
     fn the_number_keys_jump_to_a_pane() {
         let mut app = with_questions();
 
+        handle(&mut app, key(KeyCode::Char('3')));
+        assert_eq!(app.focus, Focus::Answers);
+
         handle(&mut app, key(KeyCode::Char('1')));
         assert_eq!(app.focus, Focus::State);
+    }
+
+    #[test]
+    fn the_answers_pane_scrolls_and_leaves_the_questions_alone() {
+        let mut app = with_questions();
+        app.focus = Focus::Answers;
+        app.answers_max_scroll.set(30);
+
+        handle(&mut app, key(KeyCode::Char('j')));
+        handle(&mut app, key(KeyCode::Down));
+        assert_eq!(app.answers_scroll, 2);
+        assert_eq!(app.selected, 0, "the question list did not move");
+
+        handle(&mut app, key(KeyCode::PageDown));
+        assert_eq!(app.answers_scroll, 12);
+        handle(&mut app, key(KeyCode::End));
+        assert_eq!(app.answers_scroll, 30);
+        handle(&mut app, key(KeyCode::Home));
+        assert_eq!(app.answers_scroll, 0);
+
+        for code in [KeyCode::Char('d'), KeyCode::Char('e'), KeyCode::Enter] {
+            handle(&mut app, key(code));
+        }
+        assert_eq!(app.questions.len(), 2, "nothing was deleted from here");
+        assert!(app.editor.is_none(), "no editor opened from here");
     }
 }

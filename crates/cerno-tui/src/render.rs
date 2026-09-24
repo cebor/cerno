@@ -8,7 +8,7 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Clear, List, ListItem, Paragraph, Wrap};
+use ratatui::widgets::{Block, Clear, List, ListItem, ListState, Paragraph, Wrap};
 
 /// Eighth-width blocks, so a probability of one percent is still visible as something.
 const EIGHTHS: [char; 8] = ['▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'];
@@ -132,7 +132,9 @@ fn draw_questions(frame: &mut Frame, app: &App, area: Rect) {
         },
     )));
 
-    frame.render_widget(List::new(items), inner);
+    // Stateful, so a selection below the bottom edge scrolls the list rather than vanishing.
+    let mut state = ListState::default().with_selected(Some(app.selected));
+    frame.render_stateful_widget(List::new(items), inner, &mut state);
 }
 
 fn kind_colour(kind: Kind) -> Color {
@@ -144,17 +146,12 @@ fn kind_colour(kind: Kind) -> Color {
 }
 
 fn draw_answers(frame: &mut Frame, app: &App, area: Rect) {
-    let title = match (&app.answers, app.stale) {
-        (Some(_), true) => " Answers (stale) ",
-        _ => " Answers ",
-    };
-    let block = Block::bordered()
-        .title(title)
-        .border_style(border(app.focus == Focus::Answers));
+    let block = Block::bordered().border_style(border(app.focus == Focus::Answers));
     let inner = block.inner(area);
-    frame.render_widget(block, area);
 
     let Some(answers) = &app.answers else {
+        app.answers_max_scroll.set(0);
+        frame.render_widget(block.title(" Answers "), area);
         let hint = if app.questions.is_empty() {
             "Add a question with `a`, then send with Ctrl+S."
         } else {
@@ -178,7 +175,7 @@ fn draw_answers(frame: &mut Frame, app: &App, area: Rect) {
     let width = inner.width as usize;
     let mut lines: Vec<Line> = Vec::new();
 
-    for id in answers.ids() {
+    for id in app.answer_order() {
         let Ok(answer) = answers.get(id) else {
             continue;
         };
@@ -196,7 +193,37 @@ fn draw_answers(frame: &mut Frame, app: &App, area: Rect) {
         Style::default().fg(Color::DarkGray),
     )));
 
-    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+    // Counted after wrapping, the way the paragraph will lay them out, so the last line can be
+    // scrolled to and no further.
+    let pane_width = usize::from(inner.width.max(1));
+    let drawn: usize = lines
+        .iter()
+        .map(|line| line.width().div_ceil(pane_width).max(1))
+        .sum();
+    let max_scroll =
+        u16::try_from(drawn.saturating_sub(usize::from(inner.height))).unwrap_or(u16::MAX);
+    app.answers_max_scroll.set(max_scroll);
+    let scroll = app.answers_scroll.min(max_scroll);
+
+    let mut title = String::from(" Answers ");
+    if app.stale {
+        title.push_str("(stale) ");
+    }
+    // Arrows say there is more than fits, and on which side; `3` or Tab gets there to scroll.
+    if scroll > 0 {
+        title.push_str("↑ ");
+    }
+    if scroll < max_scroll {
+        title.push_str("↓ ");
+    }
+    frame.render_widget(block.title(title), area);
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: false })
+            .scroll((scroll, 0)),
+        inner,
+    );
 }
 
 /// One option of an answer, as a row in the pane.
@@ -526,14 +553,15 @@ fn draw_editor(frame: &mut Frame, editor: &Editor, area: Rect) {
 
 fn draw_help(frame: &mut Frame, area: Rect) {
     let lines = vec![
-        "Tab / Shift+Tab   move between panes",
+        "Tab / Shift+Tab   move between panes; 1 2 3 jump to one",
         "↑ ↓               select a question, or the add row below them",
         "Enter             edit the selected question, or add on the add row",
         "a / e / d         add · edit · delete",
+        "↑ ↓ PgUp PgDn     scroll the answers, when they have focus",
         "Ctrl+S            send",
         "Esc               close a dialog, or cancel a request in flight",
         "m                 next model",
-        "t                 calibration temperature",
+        "t / T / c         temperature up · down · back to the default",
         "?                 this help",
         "Ctrl+C            quit  (q also quits outside the state box)",
     ];

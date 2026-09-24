@@ -10,6 +10,7 @@ use crate::session::Session;
 use cerno_sdk::{Answers, Client, Error, SystemOne};
 use cerno_types::ErrorCode;
 use ratatui_textarea::TextArea;
+use std::cell::Cell;
 use std::time::Instant;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -108,6 +109,12 @@ pub struct App {
     answered: Vec<(String, String)>,
     /// Whether `answers` belongs to an older request than the form now describes.
     pub stale: bool,
+    /// Lines of the answers pane scrolled past the top.
+    pub answers_scroll: u16,
+    /// How far the answers pane can scroll, as the last draw found it. Only drawing knows how
+    /// many lines the answers wrap to, so the renderer records it here and scrolling stops
+    /// there, instead of running on into blank space that then takes as many presses to undo.
+    pub answers_max_scroll: Cell<u16>,
 
     pub editor: Option<Editor>,
     pub show_help: bool,
@@ -136,6 +143,8 @@ impl App {
             sent: Vec::new(),
             answered: Vec::new(),
             stale: false,
+            answers_scroll: 0,
+            answers_max_scroll: Cell::new(0),
             editor: None,
             show_help: false,
             url,
@@ -301,6 +310,7 @@ impl App {
         match result {
             Ok(answers) => {
                 self.answers = Some(answers);
+                self.answers_scroll = 0;
                 self.answered = std::mem::take(&mut self.sent);
                 self.stale = false;
                 self.status = Status::Idle;
@@ -313,6 +323,36 @@ impl App {
             }
         }
         true
+    }
+
+    /// The ids of the answers on screen, in the order their questions were asked.
+    ///
+    /// The response keys its answers by id, which sorts `q10` before `q2` and `team` before
+    /// `urgent`. Anything the service answered that was not in the sent list — which a normal
+    /// round trip never produces — follows in the response's order rather than being hidden.
+    pub fn answer_order(&self) -> Vec<&str> {
+        let Some(answers) = &self.answers else {
+            return Vec::new();
+        };
+        let mut order: Vec<&str> = self
+            .answered
+            .iter()
+            .map(|(id, _)| id.as_str())
+            .filter(|id| answers.get(id).is_ok())
+            .collect();
+        for id in answers.ids() {
+            if !order.contains(&id) {
+                order.push(id);
+            }
+        }
+        order
+    }
+
+    /// Scroll the answers pane by `lines`, down for positive, within what the last draw allows.
+    pub fn scroll_answers(&mut self, lines: i32) {
+        let max = i32::from(self.answers_max_scroll.get());
+        let next = (i32::from(self.answers_scroll) + lines).clamp(0, max);
+        self.answers_scroll = u16::try_from(next).unwrap_or(0);
     }
 
     /// The question text an answer on screen was asked with.
@@ -464,6 +504,50 @@ mod tests {
 
         assert_eq!(app.question_for("a"), Some("Is this urgent?"));
         assert_eq!(app.question_for("missing"), None);
+    }
+
+    /// The pane lists answers the way the form lists questions, not the way ids sort.
+    #[test]
+    fn answers_are_ordered_as_their_questions_were_asked() {
+        let mut app = app();
+        app.questions = vec![draft("q2"), draft("q10"), draft("urgent"), draft("team")];
+
+        let generation = app.begin_send();
+        let response: cerno_sdk::SystemOneResponse = serde_json::from_value(serde_json::json!({
+            "answers": {
+                "q10": noul_answer(), "q2": noul_answer(),
+                "team": noul_answer(), "urgent": noul_answer()
+            },
+            "model": "m",
+            "usage": {"input_tokens": 0, "questions": 4},
+            "timing_ms": {"total": 1}
+        }))
+        .unwrap();
+        assert!(app.finish_send(generation, Ok(Answers::from(response))));
+
+        assert_eq!(app.answer_order(), ["q2", "q10", "urgent", "team"]);
+    }
+
+    #[test]
+    fn scrolling_stays_within_what_was_drawn() {
+        let mut app = app();
+        app.answers_max_scroll.set(5);
+
+        app.scroll_answers(-3);
+        assert_eq!(app.answers_scroll, 0, "not above the top");
+
+        app.scroll_answers(3);
+        assert_eq!(app.answers_scroll, 3);
+
+        app.scroll_answers(100);
+        assert_eq!(app.answers_scroll, 5, "not past the last line");
+    }
+
+    fn noul_answer() -> serde_json::Value {
+        serde_json::json!({
+            "type": "noul", "noul": 0.5, "raw_logprobs": {"A": -0.7, "B": -0.7},
+            "truncated": false, "truncated_labels": [], "label_mass": 1.0
+        })
     }
 
     /// An empty list must not panic or produce an out-of-range index.

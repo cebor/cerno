@@ -450,3 +450,59 @@ fn a_truncated_label_is_marked_on_its_row() {
         "No was observed"
     );
 }
+
+/// The response keys answers by id; the pane lists them as the questions were asked.
+#[test]
+fn answers_appear_in_the_order_their_questions_were_asked() {
+    let lines = screen(&app_with_answers());
+    let row = |needle: &str| {
+        lines
+            .iter()
+            .position(|line| line.contains(needle))
+            .unwrap_or_else(|| panic!("{needle} not on screen: {lines:#?}"))
+    };
+
+    // Alphabetically `team` would come first.
+    assert!(row("urgent  noul") < row("team  choice"), "{lines:#?}");
+}
+
+/// Answers taller than the pane scroll, and the title says there is more.
+#[test]
+fn the_answers_pane_scrolls_when_it_overflows() {
+    let mut app = app_with_answers();
+    app.focus = Focus::Answers;
+
+    let top = screen_sized(&app, 120, 16);
+    assert!(contains(&top, "urgent  noul"), "{top:#?}");
+    assert!(contains(&top, "Answers ↓"), "more below: {top:#?}");
+    let max = app.answers_max_scroll.get();
+    assert!(max > 0, "the answers must overflow 16 rows");
+
+    app.answers_scroll = max;
+    let bottom = screen_sized(&app, 120, 16);
+    assert!(!contains(&bottom, "urgent  noul"), "{bottom:#?}");
+    assert!(
+        contains(&bottom, "tokens"),
+        "the last line is reachable: {bottom:#?}"
+    );
+    assert!(contains(&bottom, "Answers ↑"), "more above: {bottom:#?}");
+}
+
+/// A selection below the bottom edge has to bring the list along, not disappear.
+#[test]
+fn the_selected_question_stays_on_screen_in_a_long_list() {
+    let mut app = app_with_answers();
+    app.questions = (1..=30)
+        .map(|n| QuestionDraft {
+            id: format!("q{n}"),
+            question: format!("question number {n}"),
+            ..Default::default()
+        })
+        .collect();
+    app.focus = Focus::Questions;
+    app.selected = 29;
+
+    let lines = screen_sized(&app, 120, 24);
+
+    assert!(contains(&lines, "▸ q30"), "{lines:#?}");
+}
