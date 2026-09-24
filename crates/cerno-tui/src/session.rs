@@ -55,10 +55,20 @@ impl Session {
         write_private(path, &serde_json::to_string_pretty(self)?)
     }
 
-    /// Save, reporting failure to the caller rather than swallowing it — the caller decides
-    /// whether a failed save is worth a message on the way out.
-    pub fn save(&self) -> std::io::Result<()> {
+    /// Forget the saved session. Emptying the form is a deliberate act, and leaving the old file
+    /// behind would bring back on the next start what was just cleared.
+    pub fn clear_at(path: &Path) -> std::io::Result<()> {
+        match std::fs::remove_file(path) {
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            other => other,
+        }
+    }
+
+    /// Save a form worth keeping, or forget the saved one when the form is empty. Failure is
+    /// reported rather than swallowed — the caller decides whether it is worth a message.
+    pub fn persist(&self) -> std::io::Result<()> {
         match default_path() {
+            Some(path) if self.is_empty() => Self::clear_at(&path),
             Some(path) => self.save_to(&path),
             None => Ok(()),
         }
@@ -201,6 +211,21 @@ mod tests {
         assert_eq!(loaded.state, "kept");
         assert!(loaded.questions.is_empty());
         assert_eq!(loaded.model, None);
+    }
+
+    /// Clearing the form and quitting must not bring the old form back on the next start.
+    #[test]
+    fn clearing_forgets_the_saved_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("last-session.json");
+        sample().save_to(&path).unwrap();
+
+        Session::clear_at(&path).unwrap();
+
+        assert!(!path.exists());
+        assert_eq!(Session::load_from(&path), Session::default());
+        // Nothing saved yet is not a failure.
+        Session::clear_at(&path).unwrap();
     }
 
     #[test]

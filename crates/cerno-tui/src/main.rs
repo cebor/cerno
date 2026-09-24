@@ -51,10 +51,7 @@ async fn main() -> ExitCode {
     ratatui::restore();
 
     // Saving after the terminal is restored, so a failure can actually be read.
-    let session = app.to_session();
-    if !session.is_empty()
-        && let Err(err) = session.save()
-    {
+    if let Err(err) = app.to_session().persist() {
         eprintln!("could not save the session: {err}");
     }
 
