@@ -592,6 +592,36 @@ async fn validation_rejects_duplicate_ids_empty_state_and_no_questions() {
         engine.validate(&request(vec![])).unwrap_err().code(),
         ErrorCode::NoQuestions
     );
+
+    let err = engine.validate(&request(vec![noul("", "a?")])).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::EmptyQuestionId);
+}
+
+/// Two options with the same text split the model's probability between copies, and `choice`
+/// could not say which one won.
+#[tokio::test]
+async fn validation_rejects_repeated_options_and_levels() {
+    let (engine, _) = engine(&[("A", -0.1)]);
+
+    let err = engine
+        .validate(&request(vec![choice("team", &["IT", "Facility", "IT "])]))
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::DuplicateOption);
+    assert_eq!(err.question_id(), Some("team"));
+    assert!(err.to_string().contains("\"IT\""), "{err}");
+
+    let levels = LevelSpec::Labels(vec!["low".into(), "high".into(), "low".into()]);
+    let err = engine
+        .validate(&request(vec![score("sev", levels)]))
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::DuplicateOption);
+
+    // Case is part of the text: these are different options to the model.
+    assert!(
+        engine
+            .validate(&request(vec![choice("team", &["IT", "it"])]))
+            .is_ok()
+    );
 }
 
 /// One request must not be able to queue an unbounded number of forward passes.

@@ -352,6 +352,8 @@
           "empty_state",
           "empty_question",
           "duplicate_question_id",
+          "empty_question_id",
+          "duplicate_option",
           "no_questions",
           "unknown_model",
           "invalid_calibration",
@@ -410,7 +412,7 @@
           {
             "type": "integer",
             "format": "int32",
-            "description": "`\"levels\": 5` — the engine generates the legend (\"1\" through \"5\").",
+            "description": "`\"levels\": 5` — the engine generates the legend (\"1\" through \"5\").\n\nWider than the range it may hold, so `\"levels\": 300` reaches validation and is refused as\n`invalid_levels` naming the bounds, rather than failing to match either variant of this\nuntagged enum with a message that names neither.",
             "minimum": 0
           },
           {

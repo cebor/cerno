@@ -155,6 +155,13 @@ impl Engine {
 
         let mut seen = BTreeMap::new();
         for question in &request.questions {
+            if question.id.trim().is_empty() {
+                return Err(EngineError::invalid(
+                    ErrorCode::EmptyQuestionId,
+                    Some(&question.id),
+                    "question ids must not be empty; the answer is found by its id",
+                ));
+            }
             if seen.insert(question.id.as_str(), ()).is_some() {
                 return Err(EngineError::invalid(
                     ErrorCode::DuplicateQuestionId,
@@ -213,6 +220,16 @@ impl Engine {
                         "choice options must not be empty",
                     ));
                 }
+                if let Some(twice) = repeated(&spec.options) {
+                    return Err(EngineError::invalid(
+                        ErrorCode::DuplicateOption,
+                        id,
+                        format!(
+                            "option {twice:?} appears more than once; the model would see it \
+                             twice and split its probability between the copies"
+                        ),
+                    ));
+                }
             }
             QuestionKind::Score(spec) => {
                 let count = spec.levels.count();
@@ -226,11 +243,22 @@ impl Engine {
                         ),
                     ));
                 }
-                if spec.levels.legend().iter().any(|l| l.trim().is_empty()) {
+                let legend = spec.levels.legend();
+                if legend.iter().any(|l| l.trim().is_empty()) {
                     return Err(EngineError::invalid(
                         ErrorCode::EmptyQuestion,
                         id,
                         "score level labels must not be empty",
+                    ));
+                }
+                if let Some(twice) = repeated(&legend) {
+                    return Err(EngineError::invalid(
+                        ErrorCode::DuplicateOption,
+                        id,
+                        format!(
+                            "level {twice:?} appears more than once; the model could not tell \
+                             the two apart"
+                        ),
                     ));
                 }
             }
@@ -363,6 +391,12 @@ impl Engine {
         let tally = read_labels(&distribution, &label_set, calibration, question_id)?;
         Ok((tally, distribution))
     }
+}
+
+/// The first text that appears twice, compared the way the model sees it: trimmed.
+fn repeated(texts: &[String]) -> Option<&str> {
+    let mut seen = std::collections::BTreeSet::new();
+    texts.iter().map(|t| t.trim()).find(|t| !seen.insert(*t))
 }
 
 /// Reduce a question to its options. This is the only place the three primitives differ.

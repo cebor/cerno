@@ -261,6 +261,23 @@ async fn invalid_requests_report_a_machine_readable_code() {
             json!({"state": "s", "questions": [{"id": "q", "score": {"levels": 11}}]}),
             "invalid_levels",
         ),
+        // Past a u8, and still the bounds rather than a failed parse.
+        (
+            json!({"state": "s", "questions": [{"id": "q", "score": {"levels": 300}}]}),
+            "invalid_levels",
+        ),
+        (
+            json!({"state": "s", "questions": [{"id": " ", "noul": "a?"}]}),
+            "empty_question_id",
+        ),
+        (
+            json!({"state": "s", "questions": [{"id": "q", "choice": {"options": ["IT", " IT "]}}]}),
+            "duplicate_option",
+        ),
+        (
+            json!({"state": "s", "questions": [{"id": "q", "score": {"levels": ["low", "low"]}}]}),
+            "duplicate_option",
+        ),
         (
             json!({"state": "s", "questions": [{"id": "q", "choice": {"options": ["only"]}}]}),
             "too_few_options",
@@ -305,8 +322,8 @@ async fn a_body_that_is_not_a_request_is_refused_with_a_code() {
         // A misspelt top-level field that would otherwise be ignored.
         json!({"state": "s", "calibraton": {"temperature": 2.0},
                "questions": [{"id": "q", "noul": "a?"}]}),
-        // A level count that does not fit the type.
-        json!({"state": "s", "questions": [{"id": "q", "score": {"levels": 300}}]}),
+        // A level count that is not a count at all.
+        json!({"state": "s", "questions": [{"id": "q", "score": {"levels": -1}}]}),
     ];
 
     for request in cases {

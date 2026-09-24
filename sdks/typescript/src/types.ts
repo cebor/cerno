@@ -121,6 +121,8 @@ export type ErrorCode =
   | "empty_state"
   | "empty_question"
   | "duplicate_question_id"
+  | "empty_question_id"
+  | "duplicate_option"
   | "no_questions"
   | "unknown_model"
   | "invalid_calibration"

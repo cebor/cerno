@@ -13,11 +13,18 @@ pub struct Levels(pub(crate) LevelSpec);
 
 impl From<u8> for Levels {
     fn from(count: u8) -> Self {
-        Self(LevelSpec::Count(count))
+        Self::count(count.into())
     }
 }
 
 impl Levels {
+    /// A rubric of `count` generated levels. `From<u8>` covers a literal at the call site; this
+    /// takes a count read from somewhere else, so a value too large for any rubric still reaches
+    /// the service and is refused there with the bounds, rather than wrapping on the way.
+    pub fn count(count: u32) -> Self {
+        Self(LevelSpec::Count(count))
+    }
+
     /// A rubric from level texts, lowest first.
     pub fn labels<S: AsRef<str>>(labels: impl IntoIterator<Item = S>) -> Self {
         Self(LevelSpec::Labels(collect(labels)))

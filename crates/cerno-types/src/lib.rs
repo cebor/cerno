@@ -157,7 +157,11 @@ pub struct ScoreSpec {
 #[cfg_attr(feature = "schema", derive(ToSchema))]
 pub enum LevelSpec {
     /// `"levels": 5` — the engine generates the legend ("1" through "5").
-    Count(u8),
+    ///
+    /// Wider than the range it may hold, so `"levels": 300` reaches validation and is refused as
+    /// `invalid_levels` naming the bounds, rather than failing to match either variant of this
+    /// untagged enum with a message that names neither.
+    Count(u32),
     /// `"levels": ["gar nicht", "wenig", ...]` — the strings become the legend.
     Labels(Vec<String>),
 }
@@ -381,6 +385,11 @@ pub enum ErrorCode {
     EmptyState,
     EmptyQuestion,
     DuplicateQuestionId,
+    /// A question id that is empty or only whitespace. The id is how its answer is found.
+    EmptyQuestionId,
+    /// Two options, or two score levels, with the same text. The model is shown both, and the
+    /// probability splits between them.
+    DuplicateOption,
     NoQuestions,
     UnknownModel,
     InvalidCalibration,

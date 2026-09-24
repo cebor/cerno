@@ -119,7 +119,7 @@ pub fn split_list(raw: &str) -> Vec<String> {
 /// What the levels field means, before it becomes an SDK type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParsedLevels {
-    Count(u8),
+    Count(u32),
     Labels(Vec<String>),
 }
 
@@ -127,7 +127,9 @@ pub enum ParsedLevels {
 pub fn parse_levels_raw(raw: &str) -> ParsedLevels {
     let trimmed = raw.trim();
 
-    if let Ok(count) = trimmed.parse::<u8>() {
+    // Wider than any rubric, so "300" stays a count the service refuses by its bounds instead of
+    // turning into a one-level list of the text "300".
+    if let Ok(count) = trimmed.parse::<u32>() {
         return ParsedLevels::Count(count);
     }
 
@@ -142,7 +144,7 @@ pub fn parse_levels_raw(raw: &str) -> ParsedLevels {
 
 pub fn parse_levels(raw: &str) -> Levels {
     match parse_levels_raw(raw) {
-        ParsedLevels::Count(n) => Levels::from(n),
+        ParsedLevels::Count(n) => Levels::count(n),
         ParsedLevels::Labels(labels) => Levels::labels(labels),
     }
 }
@@ -179,6 +181,11 @@ mod tests {
             parse_levels_raw("gering, mittel, hoch"),
             ParsedLevels::Labels(vec!["gering".into(), "mittel".into(), "hoch".into()])
         );
+    }
+
+    #[test]
+    fn a_number_too_large_for_a_rubric_is_still_a_count() {
+        assert_eq!(parse_levels_raw("300"), ParsedLevels::Count(300));
     }
 
     /// "3 stars" is not the number 3, and guessing it is would silently drop the word.

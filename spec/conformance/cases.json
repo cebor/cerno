@@ -182,6 +182,11 @@
       }
     },
     {
+      "name": "an option offered twice",
+      "status": 422,
+      "body": {"code": "duplicate_option", "message": "option \"IT\" appears more than once", "question_id": "team"}
+    },
+    {
       "name": "host timed out",
       "status": 504,
       "body": {"code": "host_timeout", "message": "host timed out after 30s"}

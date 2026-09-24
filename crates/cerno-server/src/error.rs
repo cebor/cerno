@@ -27,6 +27,8 @@ pub fn status_for(code: ErrorCode) -> StatusCode {
         | ErrorCode::EmptyState
         | ErrorCode::EmptyQuestion
         | ErrorCode::DuplicateQuestionId
+        | ErrorCode::EmptyQuestionId
+        | ErrorCode::DuplicateOption
         | ErrorCode::NoQuestions
         | ErrorCode::UnknownModel
         | ErrorCode::InvalidCalibration => StatusCode::UNPROCESSABLE_ENTITY,
@@ -125,6 +127,8 @@ mod tests {
             ErrorCode::EmptyState,
             ErrorCode::NoQuestions,
             ErrorCode::DuplicateQuestionId,
+            ErrorCode::EmptyQuestionId,
+            ErrorCode::DuplicateOption,
             ErrorCode::InvalidCalibration,
             ErrorCode::UnknownModel,
         ] {
