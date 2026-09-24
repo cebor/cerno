@@ -1,6 +1,6 @@
 //! cerno-tui — fill in a form, fire it at the service, read the distribution.
 //!
-//!     cerno-tui [--url http://localhost:3000]
+//!     cerno-tui [--url http://localhost:3000] [--help]
 //!
 //! The URL also comes from `CERNO_URL`, and defaults to `http://localhost:3000`.
 
@@ -18,6 +18,36 @@ use tokio::task::JoinHandle;
 
 const DEFAULT_URL: &str = "http://localhost:3000";
 
+const USAGE: &str = "usage: cerno-tui [--url <service url>]
+
+The URL also comes from CERNO_URL, and defaults to http://localhost:3000.";
+
+/// What the command line asked for.
+enum Invocation {
+    Run { url: Option<String> },
+    Help,
+}
+
+/// Read the arguments, refusing anything not understood. Ignoring `--ulr` would quietly talk to
+/// the default service instead of the one that was meant.
+fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Invocation, String> {
+    let mut url = None;
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "-h" | "--help" => return Ok(Invocation::Help),
+            "--url" => match args.next() {
+                Some(value) if !value.starts_with('-') => url = Some(value),
+                _ => return Err("--url needs a value".into()),
+            },
+            other => match other.strip_prefix("--url=") {
+                Some(value) if !value.is_empty() => url = Some(value.to_string()),
+                _ => return Err(format!("unexpected argument {other:?}")),
+            },
+        }
+    }
+    Ok(Invocation::Run { url })
+}
+
 /// How often the spinner advances. Fast enough to look alive, slow enough that an idle TUI is
 /// not a busy loop — the terminal is only redrawn when something actually changed.
 const TICK: Duration = Duration::from_millis(120);
@@ -30,11 +60,19 @@ struct Probe {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    let url = std::env::args()
-        .position(|arg| arg == "--url")
-        .and_then(|i| std::env::args().nth(i + 1))
-        .or_else(|| std::env::var("CERNO_URL").ok())
-        .unwrap_or_else(|| DEFAULT_URL.to_string());
+    let url = match parse_args(std::env::args().skip(1)) {
+        Ok(Invocation::Help) => {
+            println!("{USAGE}");
+            return ExitCode::SUCCESS;
+        }
+        Ok(Invocation::Run { url }) => url
+            .or_else(|| std::env::var("CERNO_URL").ok())
+            .unwrap_or_else(|| DEFAULT_URL.to_string()),
+        Err(problem) => {
+            eprintln!("cerno-tui: {problem}\n\n{USAGE}");
+            return ExitCode::from(2);
+        }
+    };
 
     let client = match Client::new(&url) {
         Ok(client) => client,
@@ -46,7 +84,17 @@ async fn main() -> ExitCode {
 
     let mut app = App::new(Session::load(), url);
 
-    let terminal = ratatui::init();
+    // `init` panics without a terminal — piped, or under a service manager — and a panic is a
+    // backtrace hint where one sentence would do.
+    let terminal = match ratatui::try_init() {
+        Ok(terminal) => terminal,
+        Err(err) => {
+            // It can fail after raw mode is already on; leave the shell as it was found.
+            ratatui::restore();
+            eprintln!("cerno-tui needs a terminal to draw in: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
     let outcome = run(terminal, &mut app, client).await;
     ratatui::restore();
 
@@ -194,4 +242,47 @@ fn spawn_probe(client: Client) -> mpsc::UnboundedReceiver<Probe> {
     });
 
     rx
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(args: &[&str]) -> Result<Invocation, String> {
+        parse_args(args.iter().map(|a| a.to_string()))
+    }
+
+    fn url(args: &[&str]) -> Option<String> {
+        match parse(args) {
+            Ok(Invocation::Run { url }) => url,
+            _ => panic!("{args:?} did not parse to a run"),
+        }
+    }
+
+    #[test]
+    fn the_url_is_read_in_either_spelling() {
+        assert_eq!(url(&[]), None);
+        assert_eq!(url(&["--url", "http://a:1"]).as_deref(), Some("http://a:1"));
+        assert_eq!(url(&["--url=http://b:2"]).as_deref(), Some("http://b:2"));
+    }
+
+    #[test]
+    fn help_is_asked_for_either_way() {
+        assert!(matches!(parse(&["--help"]), Ok(Invocation::Help)));
+        assert!(matches!(parse(&["-h"]), Ok(Invocation::Help)));
+    }
+
+    /// Each of these would otherwise have run against a service nobody named.
+    #[test]
+    fn anything_not_understood_is_refused() {
+        for args in [
+            &["--url"][..],
+            &["--url", "--help"],
+            &["--url="],
+            &["--ulr", "http://a:1"],
+            &["http://a:1"],
+        ] {
+            assert!(parse(args).is_err(), "{args:?} was accepted");
+        }
+    }
 }
