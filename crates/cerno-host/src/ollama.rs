@@ -83,7 +83,7 @@ impl OllamaHost {
             .map_err(|e| HostError::Unavailable(e.to_string()))?;
         Ok(Self {
             client,
-            base_url: base_url.into().trim_end_matches('/').to_string(),
+            base_url: crate::base_url(&base_url.into())?,
             timeout,
             refused_thinking: Mutex::default(),
         })

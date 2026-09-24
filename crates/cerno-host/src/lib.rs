@@ -159,6 +159,31 @@ pub enum HostError {
 
     #[error("could not parse host response: {0}")]
     Protocol(String),
+
+    /// A base URL no request could be sent to. Caught when the host is built, because otherwise
+    /// the server starts and every request fails with reqwest's "builder error".
+    #[error("host URL {url:?} is not usable: {reason}")]
+    InvalidUrl { url: String, reason: String },
+}
+
+/// The base URL with any trailing slash removed, or why it cannot be one.
+fn base_url(raw: &str) -> Result<String, HostError> {
+    let trimmed = raw.trim().trim_end_matches('/');
+    let invalid = |reason: String| HostError::InvalidUrl {
+        url: raw.to_string(),
+        reason,
+    };
+
+    let parsed = reqwest::Url::parse(trimmed).map_err(|e| invalid(e.to_string()))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        // `localhost:11434` parses, with `localhost` as its scheme, so naming the scheme found
+        // would only confuse.
+        return Err(invalid("it must start with http:// or https://".into()));
+    }
+    if parsed.host_str().is_none() {
+        return Err(invalid("it names no host".into()));
+    }
+    Ok(trimmed.to_string())
 }
 
 /// How much of a failed response's body travels on in the error. The whole body is logged; the
@@ -289,6 +314,39 @@ mod tests {
         };
 
         assert_eq!(body, "model not found");
+    }
+
+    #[test]
+    fn a_base_url_must_be_http_with_a_host() {
+        assert_eq!(
+            base_url(" http://localhost:11434/ ").unwrap(),
+            "http://localhost:11434"
+        );
+        assert_eq!(
+            base_url("https://api.openai.com/v1").unwrap(),
+            "https://api.openai.com/v1"
+        );
+
+        for bad in ["localhost:11434", "ftp://x", "http://", "not a url", ""] {
+            assert!(
+                matches!(base_url(bad), Err(HostError::InvalidUrl { .. })),
+                "{bad:?} was accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn connect_refuses_a_url_without_a_scheme() {
+        let err = connect(
+            HostKind::Ollama,
+            "localhost:11434",
+            None,
+            Duration::from_secs(1),
+        )
+        .err()
+        .expect("refused");
+
+        assert!(err.to_string().contains("http://"), "{err}");
     }
 
     #[test]

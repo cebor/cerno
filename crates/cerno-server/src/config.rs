@@ -157,6 +157,7 @@ impl Config {
 
         let default_model = std::env::var("CERNO_DEFAULT_MODEL")
             .ok()
+            .map(|model| model.trim().to_string())
             .or(file.default_model)
             .unwrap_or_else(|| DEFAULT_MODEL.to_string());
 
@@ -182,6 +183,7 @@ impl Config {
             host,
             host_url: std::env::var("CERNO_HOST_URL")
                 .unwrap_or_else(|_| host.default_url().to_string())
+                .trim()
                 .trim_end_matches('/')
                 .to_string(),
             host_api_key: std::env::var("CERNO_HOST_API_KEY")
@@ -190,8 +192,7 @@ impl Config {
             default_model,
             models: file.models,
             strict_models,
-            max_concurrent_questions: var("CERNO_MAX_CONCURRENT_QUESTIONS", DEFAULT_CONCURRENCY)?
-                .max(1),
+            max_concurrent_questions: var("CERNO_MAX_CONCURRENT_QUESTIONS", DEFAULT_CONCURRENCY)?,
             keep_alive: match std::env::var("CERNO_KEEP_ALIVE") {
                 // An empty value means "do not send keep_alive at all", which is distinct from
                 // the variable being absent.
@@ -210,6 +211,17 @@ impl Config {
         };
 
         config.validate()?;
+
+        // Not an error, since every request is still bounded, but the host timeout can then never
+        // be the one that fires: the request's deadline always arrives first.
+        if config.host_timeout >= config.request_timeout {
+            tracing::warn!(
+                host_timeout_secs = config.host_timeout.as_secs(),
+                request_timeout_secs = config.request_timeout.as_secs(),
+                "CERNO_HOST_TIMEOUT_SECS is not below CERNO_REQUEST_TIMEOUT_SECS, so it never \
+                 takes effect"
+            );
+        }
 
         // Not an error: both aliases work, only naming the model directly is ambiguous.
         for (model, aliases) in config.conflicting_aliases() {
@@ -248,6 +260,14 @@ impl Config {
         if self.request_timeout.is_zero() {
             return Err(ConfigError::Unusable {
                 setting: "CERNO_REQUEST_TIMEOUT_SECS",
+                reason: "must be above zero",
+            });
+        }
+        // Refused like a zero timeout rather than quietly raised to one: an operator who wrote
+        // 0 meant something, and it was not "one".
+        if self.max_concurrent_questions == 0 {
+            return Err(ConfigError::Unusable {
+                setting: "CERNO_MAX_CONCURRENT_QUESTIONS",
                 reason: "must be above zero",
             });
         }
@@ -403,7 +423,8 @@ mod tests {
         assert!(config(false).validate().is_ok());
     }
 
-    /// Each of these parses, and each would fail every request rather than the startup.
+    /// Each of these parses, and each would fail every request rather than the startup — or,
+    /// for the concurrency, be quietly replaced with a value nobody wrote.
     #[test]
     fn an_empty_model_or_url_and_a_zero_timeout_are_refused_at_startup() {
         let mut empty_model = config(false);
@@ -414,12 +435,15 @@ mod tests {
         no_time.host_timeout = Duration::ZERO;
         let mut no_request_time = config(false);
         no_request_time.request_timeout = Duration::ZERO;
+        let mut no_concurrency = config(false);
+        no_concurrency.max_concurrent_questions = 0;
 
         for (config, setting) in [
             (empty_model, "default_model"),
             (empty_url, "CERNO_HOST_URL"),
             (no_time, "CERNO_HOST_TIMEOUT_SECS"),
             (no_request_time, "CERNO_REQUEST_TIMEOUT_SECS"),
+            (no_concurrency, "CERNO_MAX_CONCURRENT_QUESTIONS"),
         ] {
             assert!(
                 matches!(
