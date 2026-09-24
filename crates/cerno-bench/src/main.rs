@@ -15,7 +15,7 @@
 //!
 //! An API key for the OpenAI-compatible hosts comes from `CERNO_HOST_API_KEY`.
 
-use cerno_core::{Engine, labels};
+use cerno_core::{Engine, EngineError, labels};
 use cerno_host::HostKind;
 use cerno_types::{Answer, Calibration, ChoiceSpec, Question, QuestionKind, ScoreSpec};
 use serde::Deserialize;
@@ -352,8 +352,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("\n{model}");
 
         // Warm-up: the first call pays for loading the model into VRAM and would otherwise
-        // dominate the p99.
-        let _ = engine
+        // dominate the p99. It is also where a misspelt model or an unreachable host shows:
+        // measured anyway, every case would fail, the model would be reported at 0% fidelity for
+        // a fault that is not its own, and the doc would be overwritten with that. A model that
+        // answers without a letter is different — that is exactly what the run is here to count.
+        let warm_up = engine
             .answer(
                 "warm up",
                 &Question {
@@ -364,6 +367,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Calibration::default(),
             )
             .await;
+        if let Err(err @ EngineError::Host(_)) = warm_up {
+            eprintln!("{model}: the warm-up failed, so nothing was measured or written: {err}");
+            std::process::exit(1);
+        }
 
         let mut outcomes = Vec::with_capacity(dataset.cases.len());
         for case in &dataset.cases {
