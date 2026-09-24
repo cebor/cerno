@@ -577,9 +577,18 @@ async fn a_model_the_host_does_not_have_is_unknown_not_unavailable() {
 
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
     assert_eq!(body["code"], "unknown_model");
+    let message = body["message"].as_str().unwrap();
     assert!(
-        body["message"].as_str().unwrap().contains("not found"),
-        "{body}"
+        message.contains("not found"),
+        "the host's own words: {body}"
+    );
+    assert!(
+        message.contains("\"nope:1b\""),
+        "the model asked for: {body}"
+    );
+    assert!(
+        message.contains("host URL"),
+        "what to check otherwise: {body}"
     );
 }
 

@@ -367,7 +367,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Calibration::default(),
             )
             .await;
-        if let Err(err @ EngineError::Host(_)) = warm_up {
+        if let Err(err @ (EngineError::Host(_) | EngineError::UnknownModel { .. })) = warm_up {
             eprintln!("{model}: the warm-up failed, so nothing was measured or written: {err}");
             std::process::exit(1);
         }

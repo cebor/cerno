@@ -37,6 +37,22 @@ pub enum EngineError {
         observed: Vec<String>,
     },
 
+    /// The host answered 404 to a question naming `model`.
+    ///
+    /// Every runtime answers a model it does not have that way, and without `strict_models`
+    /// that is where a misspelt `model` surfaces — the caller's to fix, so not a 5xx inviting a
+    /// retry. But a host URL missing its `/v1` answers 404 to every model as well, so the
+    /// message says what to check when it is not the model.
+    #[error(
+        "model {model:?} is not known to {host} ({source}); if every model is refused this way, \
+         the host URL is probably wrong"
+    )]
+    UnknownModel {
+        model: String,
+        host: String,
+        source: HostError,
+    },
+
     #[error(transparent)]
     Host(#[from] HostError),
 }
@@ -46,11 +62,8 @@ impl EngineError {
         match self {
             Self::Invalid { code, .. } => *code,
             Self::NoLabelMatched { .. } => ErrorCode::NoLabelMatched,
+            Self::UnknownModel { .. } => ErrorCode::UnknownModel,
             Self::Host(HostError::Timeout(_)) => ErrorCode::HostTimeout,
-            // Every runtime answers a model it does not have with 404. Without `strict_models`
-            // that is where a misspelt `model` surfaces, and it is the caller's to fix: as a 5xx
-            // it would read as "retry", and no retry changes the answer.
-            Self::Host(HostError::Status { status: 404, .. }) => ErrorCode::UnknownModel,
             Self::Host(_) => ErrorCode::HostUnavailable,
         }
     }
@@ -59,7 +72,7 @@ impl EngineError {
         match self {
             Self::Invalid { question_id, .. } => question_id.as_deref(),
             Self::NoLabelMatched { question_id, .. } => Some(question_id),
-            Self::Host(_) => None,
+            Self::UnknownModel { .. } | Self::Host(_) => None,
         }
     }
 
@@ -386,7 +399,15 @@ impl Engine {
                 top_logprobs: self.max_options(),
                 keep_alive: self.keep_alive.clone(),
             })
-            .await?;
+            .await
+            .map_err(|error| match error {
+                HostError::Status { status: 404, .. } => EngineError::UnknownModel {
+                    model: model.to_string(),
+                    host: self.host.name().to_string(),
+                    source: error,
+                },
+                other => EngineError::Host(other),
+            })?;
 
         let tally = read_labels(&distribution, &label_set, calibration, question_id)?;
         Ok((tally, distribution))
