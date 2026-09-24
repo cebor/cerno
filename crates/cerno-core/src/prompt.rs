@@ -24,26 +24,33 @@ pub fn user_turn(state: &str, question: Option<&str>, options: &[(&str, &str)]) 
 
     if let Some(question) = question {
         out.push_str("QUESTION: ");
-        out.push_str(question.trim());
+        push_one_line(&mut out, question);
         out.push_str("\n\n");
     }
 
     for (label, text) in options {
         out.push_str(label);
         out.push_str(") ");
-        // One line per option, always. A line break inside an option would start what looks to
-        // the model like the next option: `"x\nB) y"` offered an option B that was never asked.
-        for (i, word) in text.split_whitespace().enumerate() {
-            if i > 0 {
-                out.push(' ');
-            }
-            out.push_str(word);
-        }
+        push_one_line(&mut out, text);
         out.push('\n');
     }
 
     out.push_str("\nAnswer with one letter only.");
     out
+}
+
+/// Append `text` with every run of whitespace, line breaks included, collapsed to one space.
+///
+/// The question and each option are one line, always. A line break inside either would start
+/// what looks to the model like an option: `"x\nB) y"` offered an option B that was never asked.
+/// The state keeps its lines; it sits above the question, where nothing reads it as a label.
+fn push_one_line(out: &mut String, text: &str) {
+    for (i, word) in text.split_whitespace().enumerate() {
+        if i > 0 {
+            out.push(' ');
+        }
+        out.push_str(word);
+    }
 }
 
 #[cfg(test)]
@@ -92,6 +99,29 @@ mod tests {
 
         assert!(prompt.contains("A) x B) y\nB) z\n"), "{prompt}");
         assert_eq!(prompt.matches("\nB) ").count(), 1, "{prompt}");
+    }
+
+    /// The question sits right above the options, so a line break in it can forge one too.
+    #[test]
+    fn the_question_is_always_one_line() {
+        let prompt = user_turn("s", Some("Which?\nC) extra"), &[("A", "x"), ("B", "y")]);
+
+        assert!(
+            prompt.contains("QUESTION: Which? C) extra\n\nA) x\n"),
+            "{prompt}"
+        );
+        assert!(!prompt.contains("\nC) "), "{prompt}");
+    }
+
+    /// The state is free text and keeps its layout; only the lines near the labels are flattened.
+    #[test]
+    fn the_state_keeps_its_lines() {
+        let prompt = user_turn("line one\nline two", None, &[("A", "x")]);
+
+        assert!(
+            prompt.starts_with("CONTEXT:\nline one\nline two\n\n"),
+            "{prompt}"
+        );
     }
 
     #[test]
