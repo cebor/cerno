@@ -1,5 +1,5 @@
 {
-  "note": "The shared truth for every cerno SDK. `requests` pin the JSON a client must produce from a given builder call; `responses` pin the values a client must read back out; `errors` pin the failure mapping. The third response case is an answer read off letters the model was not going to write: its `label_mass` is what gives that away. Each SDK runs all three against a mock server. The Rust test suite additionally checks every body here against the server's own types, so a case can never describe something the service would reject.",
+  "note": "The shared truth for every cerno SDK. `requests` pin the JSON a client must produce from a given builder call; `responses` pin the values a client must read back out; `errors` pin the failure mapping; `unknown_codes` are errors in cerno's shape with a code newer than the client, which must keep that code; `unexpected` are bodies that are not cerno's at all, sent verbatim as `body_text`, which every client reports as an unexpected response rather than guessing at them. The third response case is an answer read off letters the model was not going to write: its `label_mass` is what gives that away. Each SDK runs all of them against a mock server. The Rust test suite additionally checks every body here against the server's own types, so a case can never describe something the service would reject.",
   "version": 1,
 
   "requests": [
@@ -200,6 +200,42 @@
       "name": "internal failure",
       "status": 500,
       "body": {"code": "internal", "message": "answering question \"q\" failed to complete: task panicked", "question_id": "q"}
+    }
+  ],
+
+  "unknown_codes": [
+    {
+      "name": "a code newer than the client",
+      "status": 429,
+      "body": {"code": "quota_exceeded", "message": "try again in 3s", "question_id": "q"}
+    }
+  ],
+
+  "unexpected": [
+    {
+      "name": "a gateway's HTML page",
+      "status": 503,
+      "body_text": "<html>service unavailable</html>"
+    },
+    {
+      "name": "JSON error in some other shape",
+      "status": 502,
+      "body_text": "{\"error\": \"bad gateway\"}"
+    },
+    {
+      "name": "success status with a body that is not JSON",
+      "status": 200,
+      "body_text": "<html>hello</html>"
+    },
+    {
+      "name": "success status with JSON that is not an answer",
+      "status": 200,
+      "body_text": "{\"hello\": \"world\"}"
+    },
+    {
+      "name": "success status with an empty object",
+      "status": 200,
+      "body_text": "{}"
     }
   ]
 }

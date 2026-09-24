@@ -7,7 +7,7 @@ one type and know nothing slipped past it.
 import httpx
 import pytest
 
-from cerno import AsyncClient, CernoError, Client, TransportError, UnexpectedResponse
+from cerno import AsyncClient, CernoError, Client, TransportError
 
 
 def client_with(handler) -> Client:
@@ -39,22 +39,6 @@ async def test_the_async_client_raises_a_transport_error_too():
     with pytest.raises(TransportError):
         await client.systemone("state").noul("q", "Urgent?").send()
     await client.aclose()
-
-
-def test_a_success_status_with_a_body_that_is_not_json_is_unexpected():
-    client = client_with(lambda _r: httpx.Response(200, text="<html>hello</html>"))
-
-    with pytest.raises(UnexpectedResponse) as caught:
-        client.systemone("state").noul("q", "Urgent?").send()
-
-    assert caught.value.status == 200
-
-
-def test_a_success_status_with_json_in_another_shape_is_unexpected():
-    client = client_with(lambda _r: httpx.Response(200, json={"hello": "world"}))
-
-    with pytest.raises(UnexpectedResponse):
-        client.systemone("state").noul("q", "Urgent?").send()
 
 
 def test_health_is_false_when_the_service_cannot_be_reached():

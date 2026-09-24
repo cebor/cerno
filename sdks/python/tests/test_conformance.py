@@ -101,18 +101,36 @@ def test_error_cases_raise_api_error_with_the_code(cases):
         assert caught.value.question_id == case["body"].get("question_id"), name
 
 
-def test_a_non_cerno_error_body_is_reported_as_unexpected():
-    """A gateway in front of the service can return HTML. Calling that a cerno error code would
-    be a lie, so it surfaces as something distinctly different."""
-    transport = httpx.MockTransport(
-        lambda _request: httpx.Response(503, text="<html>service unavailable</html>")
-    )
-    client = Client("http://cerno.test", client=httpx.Client(transport=transport))
+def test_unknown_code_cases_keep_their_code_and_message(cases):
+    """A newer service can send a code this client has never heard of. That is still the
+    service speaking, so it is an ApiError carrying the code as it came."""
+    for case in cases["unknown_codes"]:
+        name, body = case["name"], case["body"]
+        client = client_for(case["status"], body)
 
-    with pytest.raises(UnexpectedResponse) as caught:
-        client.systemone("state").noul("q", "Urgent?").send()
+        with pytest.raises(ApiError) as caught:
+            client.systemone("state").noul("q", "Urgent?").send()
 
-    assert caught.value.status == 503
+        assert caught.value.status == case["status"], name
+        assert caught.value.code == body["code"], name
+        assert caught.value.message == body["message"], name
+        assert caught.value.question_id == body.get("question_id"), name
+
+
+def test_unexpected_cases_are_reported_as_unexpected(cases):
+    """A body that is not cerno's - a gateway's HTML page, some other JSON, a 2xx that is not an
+    answer - is reported as exactly that, never as a cerno error code it does not carry."""
+    for case in cases["unexpected"]:
+        name, status, text = case["name"], case["status"], case["body_text"]
+        transport = httpx.MockTransport(
+            lambda _request, status=status, text=text: httpx.Response(status, text=text)
+        )
+        client = Client("http://cerno.test", client=httpx.Client(transport=transport))
+
+        with pytest.raises(UnexpectedResponse) as caught:
+            client.systemone("state").noul("q", "Urgent?").send()
+
+        assert caught.value.status == status, name
 
 
 def test_reading_an_answer_as_the_wrong_type_names_both_types(cases):

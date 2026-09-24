@@ -125,15 +125,41 @@ test("error cases throw ApiError carrying the code", async () => {
   }
 });
 
-test("a non-cerno error body is reported as unexpected", async () => {
-  // A gateway in front of the service can return HTML. Calling that a cerno error code would be
-  // a lie, so it surfaces as something distinctly different.
-  const client = clientFor(503, "<html>service unavailable</html>", true);
+test("unknown code cases keep their code and message", async () => {
+  // A newer service can send a code this client has never heard of. That is still the service
+  // speaking, so it is an ApiError carrying the code as it came.
+  for (const testCase of cases.unknown_codes) {
+    const client = clientFor(testCase.status, testCase.body);
 
-  await assert.rejects(
-    () => client.systemone("state").noul("q", "Urgent?").send(),
-    (err: unknown) => err instanceof UnexpectedResponse && err.status === 503,
-  );
+    await assert.rejects(
+      () => client.systemone("state").noul("q", "Urgent?").send(),
+      (err: unknown) => {
+        assert.ok(err instanceof ApiError, testCase.name);
+        assert.equal(err.status, testCase.status, testCase.name);
+        assert.equal(err.code, testCase.body.code, testCase.name);
+        assert.equal(err.questionId, testCase.body.question_id, testCase.name);
+        assert.ok(err.message.includes(testCase.body.message), testCase.name);
+        return true;
+      },
+    );
+  }
+});
+
+test("unexpected cases are reported as unexpected", async () => {
+  // A body that is not cerno's - a gateway's HTML page, some other JSON, a 2xx that is not an
+  // answer - is reported as exactly that, never as a cerno error code it does not carry.
+  for (const testCase of cases.unexpected) {
+    const client = clientFor(testCase.status, testCase.body_text, true);
+
+    await assert.rejects(
+      () => client.systemone("state").noul("q", "Urgent?").send(),
+      (err: unknown) => {
+        assert.ok(err instanceof UnexpectedResponse, `${testCase.name}: ${String(err)}`);
+        assert.equal(err.status, testCase.status, testCase.name);
+        return true;
+      },
+    );
+  }
 });
 
 test("reading an answer as the wrong type names both types", async () => {

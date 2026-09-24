@@ -51,14 +51,14 @@ export class Client {
   /** Start a request about `state`. */
   systemone(state: string): SystemOneBuilder {
     return new SystemOneBuilder(state, async (body) => {
-      const response = await this.request<SystemOneResponse>("POST", "/v1/systemone", body);
+      const response = await this.request("POST", "/v1/systemone", body, isSystemOneResponse);
       return new Answers(response);
     });
   }
 
   /** The models this service will answer for. */
   models(): Promise<ModelsResponse> {
-    return this.request<ModelsResponse>("GET", "/v1/models");
+    return this.request("GET", "/v1/models", undefined, isModelsResponse);
   }
 
   /** Whether the service is up. False, not an error, when it cannot be reached in time. */
@@ -73,7 +73,16 @@ export class Client {
     }
   }
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  /**
+   * `accepts` decides whether a 2xx body is the shape asked for. Without it a proxy answering
+   * `200 {}` would reach `Answers` and fail there as a TypeError, not as a `CernoError`.
+   */
+  private async request<T>(
+    method: string,
+    path: string,
+    body: unknown,
+    accepts: (value: unknown) => value is T,
+  ): Promise<T> {
     // An explicit abort, so a wedged host surfaces as a timeout rather than hanging forever.
     const abort = AbortSignal.timeout(this.timeoutMs);
 
@@ -95,11 +104,14 @@ export class Client {
     }
 
     if (response.ok) {
+      let value: unknown;
       try {
-        return JSON.parse(text) as T;
+        value = JSON.parse(text);
       } catch {
         throw new UnexpectedResponse(response.status, text);
       }
+      if (!accepts(value)) throw new UnexpectedResponse(response.status, text);
+      return value;
     }
 
     let parsed: ErrorResponse | undefined;
@@ -114,6 +126,26 @@ export class Client {
     if (!parsed) throw new UnexpectedResponse(response.status, text);
     throw new ApiError(response.status, parsed);
   }
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** The fields `Answers` reads on construction. The answers themselves are checked on access. */
+function isSystemOneResponse(value: unknown): value is SystemOneResponse {
+  return (
+    isObject(value) &&
+    isObject(value.answers) &&
+    typeof value.model === "string" &&
+    isObject(value.usage) &&
+    isObject(value.timing_ms) &&
+    typeof value.timing_ms.total === "number"
+  );
+}
+
+function isModelsResponse(value: unknown): value is ModelsResponse {
+  return isObject(value) && Array.isArray(value.models) && typeof value.default === "string";
 }
 
 export type { SystemOneRequest };

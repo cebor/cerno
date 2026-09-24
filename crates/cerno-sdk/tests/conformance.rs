@@ -208,63 +208,82 @@ async fn error_cases_map_to_typed_errors() {
     }
 }
 
-/// A gateway in front of the service can return HTML. Reporting that as a cerno error code
-/// would be a lie, so it has to surface as something distinctly different.
+/// A body that is not cerno's - a gateway's HTML page, some other JSON, a 2xx that is not an
+/// answer - is reported as exactly that, never as a cerno error code it does not carry.
 #[tokio::test]
-async fn a_non_cerno_error_body_is_reported_as_unexpected() {
-    let mut server = mockito::Server::new_async().await;
-    let _mock = server
-        .mock("POST", "/v1/systemone")
-        .with_status(503)
-        .with_body("<html>service unavailable</html>")
-        .create_async()
-        .await;
+async fn unexpected_cases_are_reported_as_unexpected() {
+    let cases = cases();
 
-    let err = client(&server.url())
-        .systemone("state")
-        .noul("q", "Urgent?")
-        .send()
-        .await
-        .unwrap_err();
+    for case in cases["unexpected"].as_array().unwrap() {
+        let name = case["name"].as_str().unwrap();
+        let status = case["status"].as_u64().unwrap() as u16;
 
-    assert!(
-        matches!(err, Error::Unexpected { status: 503, .. }),
-        "{err:?}"
-    );
+        let mut server = mockito::Server::new_async().await;
+        let _mock = server
+            .mock("POST", "/v1/systemone")
+            .with_status(status as usize)
+            .with_body(case["body_text"].as_str().unwrap())
+            .create_async()
+            .await;
+
+        let err = client(&server.url())
+            .systemone("state")
+            .noul("q", "Urgent?")
+            .send()
+            .await
+            .expect_err(&format!("case {name:?} should fail"));
+
+        assert!(
+            matches!(err, Error::Unexpected { status: got, .. } if got == status),
+            "case {name:?} gave {err:?}"
+        );
+    }
 }
 
 /// A newer service can send a code this client has never heard of. That is still the service
 /// speaking, not a proxy, and its code and message must survive.
 #[tokio::test]
-async fn an_error_code_newer_than_the_client_keeps_its_code_and_message() {
-    let mut server = mockito::Server::new_async().await;
-    let _mock = server
-        .mock("POST", "/v1/systemone")
-        .with_status(429)
-        .with_body(r#"{"code":"quota_exceeded","message":"try again in 3s","question_id":"q"}"#)
-        .create_async()
-        .await;
+async fn unknown_code_cases_keep_their_code_and_message() {
+    let cases = cases();
 
-    let err = client(&server.url())
-        .systemone("state")
-        .noul("q", "Urgent?")
-        .send()
-        .await
-        .unwrap_err();
+    for case in cases["unknown_codes"].as_array().unwrap() {
+        let name = case["name"].as_str().unwrap();
+        let status = case["status"].as_u64().unwrap() as u16;
+        let body = &case["body"];
 
-    let Error::UnknownCode {
-        status,
-        code,
-        message,
-        question_id,
-    } = err
-    else {
-        panic!("{err:?}")
-    };
-    assert_eq!(status, 429);
-    assert_eq!(code, "quota_exceeded");
-    assert_eq!(message, "try again in 3s");
-    assert_eq!(question_id.as_deref(), Some("q"));
+        let mut server = mockito::Server::new_async().await;
+        let _mock = server
+            .mock("POST", "/v1/systemone")
+            .with_status(status as usize)
+            .with_body(body.to_string())
+            .create_async()
+            .await;
+
+        let err = client(&server.url())
+            .systemone("state")
+            .noul("q", "Urgent?")
+            .send()
+            .await
+            .expect_err(&format!("case {name:?} should fail"));
+
+        let Error::UnknownCode {
+            status: got,
+            code,
+            message,
+            question_id,
+        } = err
+        else {
+            panic!("case {name:?} gave {err:?}")
+        };
+        assert_eq!(got, status, "case {name:?}");
+        assert_eq!(code, body["code"].as_str().unwrap(), "case {name:?}");
+        assert_eq!(message, body["message"].as_str().unwrap(), "case {name:?}");
+        assert_eq!(
+            question_id.as_deref(),
+            body["question_id"].as_str(),
+            "case {name:?}"
+        );
+    }
 }
 
 /// Asking for the wrong type is a programming mistake and must say so precisely.

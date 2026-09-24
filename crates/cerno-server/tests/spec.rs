@@ -60,6 +60,27 @@ fn the_conformance_cases_are_well_formed() {
         assert!(case["status"].is_u64(), "{case}");
         assert!(case["body"]["code"].is_string(), "{case}");
     }
+
+    let unknown_codes = cases["unknown_codes"]
+        .as_array()
+        .expect("unknown_codes array");
+    assert!(!unknown_codes.is_empty());
+    for case in unknown_codes {
+        let code = case["body"]["code"].clone();
+        assert!(code.is_string(), "{case}");
+        // A code the service can send is an `errors` case; here it would test nothing.
+        assert!(
+            serde_json::from_value::<cerno_types::ErrorCode>(code).is_err(),
+            "{case} names a code the service knows"
+        );
+    }
+
+    let unexpected = cases["unexpected"].as_array().expect("unexpected array");
+    assert!(!unexpected.is_empty());
+    for case in unexpected {
+        assert!(case["status"].is_u64(), "{case}");
+        assert!(case["body_text"].is_string(), "{case}");
+    }
 }
 
 /// Request cases describe a body an SDK must produce. Deserialising each one through the
