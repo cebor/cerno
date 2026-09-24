@@ -48,11 +48,21 @@ impl Session {
             .unwrap_or_default()
     }
 
+    /// Write the session beside `path` and rename it into place, so the file is always either
+    /// the old session or the new one. Written in place, a crash between truncating and writing
+    /// would leave a broken file, which loads as an empty form without a word.
     pub fn save_to(&self, path: &Path) -> std::io::Result<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        write_private(path, &serde_json::to_string_pretty(self)?)
+        let mut staging = path.as_os_str().to_owned();
+        staging.push(".tmp");
+        let staging = PathBuf::from(staging);
+
+        write_private(&staging, &serde_json::to_string_pretty(self)?)?;
+        std::fs::rename(&staging, path).inspect_err(|_| {
+            let _ = std::fs::remove_file(&staging);
+        })
     }
 
     /// Forget the saved session. Emptying the form is a deliberate act, and leaving the old file
@@ -176,6 +186,22 @@ mod tests {
         let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o600, "{mode:o}");
         assert_eq!(Session::load_from(&path), sample());
+    }
+
+    /// Saving leaves the session and nothing else: the staging file is renamed, not left over.
+    #[test]
+    fn saving_leaves_no_staging_file_behind() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("last-session.json");
+
+        sample().save_to(&path).unwrap();
+        sample().save_to(&path).unwrap();
+
+        let names: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(names, ["last-session.json"]);
     }
 
     /// The first ever launch has no file, and that is the normal case, not an error.
