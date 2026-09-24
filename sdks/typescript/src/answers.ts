@@ -32,9 +32,10 @@ export class Answers {
 
   /** The raw answer for `id`. */
   get(id: string): Answer {
-    const answer = this.response.answers[id];
-    if (answer === undefined) throw new MissingAnswer(id);
-    return answer;
+    // An own property only: `answers` is a parsed object, so `toString` or `constructor` would
+    // otherwise be found on its prototype and read as an answer of type `undefined`.
+    if (!Object.hasOwn(this.response.answers, id)) throw new MissingAnswer(id);
+    return this.response.answers[id]!;
   }
 
   ids(): string[] {

@@ -155,6 +155,10 @@ test("reading an answer as the wrong type names both types", async () => {
   );
 
   assert.throws(() => answers.noul("nope"), MissingAnswer);
+  // Names every plain object inherits are not answers either.
+  for (const inherited of ["toString", "constructor", "__proto__"]) {
+    assert.throws(() => answers.get(inherited), MissingAnswer, inherited);
+  }
 });
 
 test("answers expose ids, probabilities and the raw response", async () => {
