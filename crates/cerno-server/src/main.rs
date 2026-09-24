@@ -10,11 +10,13 @@ use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    // The leading `warn` is load-bearing. A filter made only of per-crate directives disables
+    // every target it does not name, and `cerno_host` is where a failed host call logs its full
+    // body — the one a 401 tells the caller to look for in the service log.
     tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("cerno_server=info,cerno_core=info")),
-        )
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+            EnvFilter::new("warn,cerno_server=info,cerno_core=info,cerno_host=info")
+        }))
         .init();
 
     let config = match Config::from_env() {
