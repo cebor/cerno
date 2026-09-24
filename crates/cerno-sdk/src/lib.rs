@@ -21,6 +21,14 @@
 //!
 //! The wire types come from `cerno-types`, the same crate the server serialises from, so the
 //! client cannot drift from the service it talks to.
+//!
+//! The same client exists for [Python] and [TypeScript], written by hand against the same
+//! OpenAPI document and tested against the same [conformance cases], so all three build identical
+//! requests.
+//!
+//! [Python]: https://github.com/cebor/cerno/blob/main/sdks/python/README.md
+//! [TypeScript]: https://github.com/cebor/cerno/blob/main/sdks/typescript/README.md
+//! [conformance cases]: https://github.com/cebor/cerno/blob/main/spec/conformance/cases.json
 
 mod builder;
 mod response;

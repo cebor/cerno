@@ -233,6 +233,15 @@ The crates, both SDKs and `spec/openapi.json` all carry the same version. `scrip
 run once the places it checks disagree. The spec's version comes from `CARGO_PKG_VERSION`, so a
 hand bump without regenerating the spec also fails `the_checked_in_spec_matches_the_code`.
 
+## The docs site has a hand-written front page
+
+`.github/workflows/docs.yml` publishes `cargo doc --workspace` to GitHub Pages. Stable rustdoc
+writes no root `index.html`, so `docs/rustdoc-index.html` is copied there; it is the one place the
+Python and TypeScript READMEs are linked next to the crates, and a new crate belongs in its table.
+nightly's `--index-page` would render it from Markdown, but gives the page no stylesheet and names
+it after its source file, so it is not worth a second toolchain. The CI runs the same `cargo doc`
+with `-D warnings`, so a broken intra-doc link fails a push rather than the deploy.
+
 ## Host ceilings
 
 Every adapter reports `max_top_logprobs: 20` today. llama.cpp's own ceiling is higher, which is

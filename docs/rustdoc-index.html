@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!-- The landing page of the docs site, copied to target/doc/index.html by docs.yml. Stable
+     `cargo doc` writes no index of its own, only a directory per crate. A new crate belongs in the
+     table below. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>cerno</title>
+  <style>
+    :root {
+      --bg: #fff;
+      --fg: #000;
+      --link: #3873ad;
+      --crate: #ad378a;
+      --border: #e0e0e0;
+      --code-bg: #f5f5f5;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #353535;
+        --fg: #ddd;
+        --link: #d2991d;
+        --crate: #2dbfb8;
+        --border: #5a5a5a;
+        --code-bg: #2a2a2a;
+      }
+    }
+
+    body {
+      margin: 0 auto;
+      max-width: 960px;
+      padding: 24px 16px 48px;
+      background: var(--bg);
+      color: var(--fg);
+      font: 16px/1.5 "Source Serif 4", "Source Serif Pro", Georgia, serif;
+    }
+
+    h1, h2, td:first-child a {
+      font-family: "Fira Sans", "Segoe UI", Arial, sans-serif;
+      font-weight: 500;
+    }
+
+    h1 { font-size: 1.5rem; margin: 0 0 16px; }
+
+    h2 {
+      font-size: 1.3rem;
+      margin: 32px 0 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    a { color: var(--link); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    code {
+      font: 0.875em "Source Code Pro", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.3em;
+      border-radius: 6px;
+    }
+
+    table { border-collapse: collapse; width: 100%; }
+    td { padding: 6px 12px 6px 0; vertical-align: top; }
+    td:first-child a { color: var(--crate); }
+    tr + tr td { border-top: 1px solid var(--border); }
+
+    li { margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <h1>cerno</h1>
+  <p>Noul, Choice and Score — JEV’s system-one primitives — against a locally hosted model. Each
+  question is one forward pass: the answer is read from the probability distribution over the first
+  generated token. The <a href="https://github.com/cebor/cerno#readme">README</a> has the overview,
+  and <a href="https://github.com/cebor/cerno/blob/main/docs/model-selection.md">model-selection.md</a>
+  the measured model comparison.</p>
+
+  <h2>Crates</h2>
+  <table>
+    <tr><td><a href="cerno_types/index.html">cerno_types</a></td><td>wire types — serde always, utoipa behind a feature</td></tr>
+    <tr><td><a href="cerno_host/index.html">cerno_host</a></td><td><code>ModelHost</code> trait, the Ollama and OpenAI-compatible adapters</td></tr>
+    <tr><td><a href="cerno_core/index.html">cerno_core</a></td><td>labels, prompt, logprob maths, engine</td></tr>
+    <tr><td><a href="cerno_server/index.html">cerno_server</a></td><td>the HTTP service, axum + utoipa</td></tr>
+    <tr><td><a href="cerno_openapi/index.html">cerno_openapi</a></td><td><code>cerno-server</code>’s binary that prints <code>spec/openapi.json</code></td></tr>
+    <tr><td><a href="cerno_sdk/index.html">cerno_sdk</a></td><td>Rust client</td></tr>
+    <tr><td><a href="cerno_tui/index.html">cerno_tui</a></td><td>terminal front end, on <code>cerno-sdk</code></td></tr>
+    <tr><td><a href="cerno_bench/index.html">cerno_bench</a></td><td>model benchmark, not published</td></tr>
+  </table>
+
+  <h2>The other SDKs</h2>
+  <p>The Rust client has two siblings, written by hand against the same
+  <a href="https://github.com/cebor/cerno/blob/main/spec/openapi.json">OpenAPI document</a> and tested
+  against the same
+  <a href="https://github.com/cebor/cerno/blob/main/spec/conformance/cases.json">conformance cases</a>:</p>
+  <ul>
+    <li><a href="https://github.com/cebor/cerno/blob/main/sdks/python/README.md">Python</a> — <code>uv add cerno-sdk</code>, imported as <code>cerno</code></li>
+    <li><a href="https://github.com/cebor/cerno/blob/main/sdks/typescript/README.md">TypeScript</a> — <code>npm install cerno-sdk</code></li>
+  </ul>
+</body>
+</html>

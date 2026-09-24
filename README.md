@@ -153,6 +153,9 @@ The Python package installs as `cerno-sdk` and imports as `cerno`.
 All three are written by hand against `spec/openapi.json` and tested against the same
 [conformance cases](spec/conformance/cases.json), so they cannot drift apart silently.
 
+The API documentation of every crate, with links to the Python and TypeScript READMEs, is at
+[cebor.github.io/cerno](https://cebor.github.io/cerno/).
+
 ## The terminal front end
 
 Started above. It points at `http://localhost:3000` unless `--url` or `CERNO_URL` says
@@ -291,6 +294,7 @@ host gets the same primitives for free.
 cargo test --workspace          # includes the TUI, which needs no terminal to test
 cd sdks/python && uv run pytest
 cd sdks/typescript && npm test
+cargo doc --workspace --no-deps --open
 ```
 
 `spec/openapi.json` is generated, and a test fails when it drifts from the code:
