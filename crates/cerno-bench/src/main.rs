@@ -47,6 +47,45 @@ struct Case {
 }
 
 impl Case {
+    /// Why this case cannot be run, if it cannot. The accessors below assume a case passed, so a
+    /// dataset is checked whole before the first model is loaded, rather than panicking partway
+    /// through a run over whichever case happens to be malformed.
+    fn problem(&self) -> Option<String> {
+        let named = [
+            self.noul.is_some(),
+            self.choice.is_some(),
+            self.score.is_some(),
+        ];
+        if named.iter().filter(|n| **n).count() != 1 {
+            return Some("needs exactly one of noul, choice or score".into());
+        }
+
+        if self.noul.is_some() {
+            return self
+                .expect_yes
+                .is_none()
+                .then(|| "a noul case needs expect_yes".into());
+        }
+
+        let (offered, first) = match (&self.choice, &self.score) {
+            (Some(choice), _) => (choice.options.len(), 0),
+            (_, Some(score)) => (score.levels.count(), 1),
+            _ => unreachable!("exactly one primitive, and it is not a noul"),
+        };
+        if offered == 0 {
+            return Some(format!("this {} offers nothing to pick", self.primitive()));
+        }
+        let last = offered + first - 1;
+        match self.expect {
+            None => Some(format!("a {} case needs expect", self.primitive())),
+            Some(want) if want < first || want > last => Some(format!(
+                "expect is {want}, outside {first}..={last} for this {}",
+                self.primitive()
+            )),
+            Some(_) => None,
+        }
+    }
+
     fn primitive(&self) -> &'static str {
         if self.noul.is_some() {
             "noul"
@@ -327,6 +366,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let host_url = arg(&args, "--host").unwrap_or_else(|| host_kind.default_url().into());
 
     let dataset: Dataset = serde_json::from_str(&std::fs::read_to_string(&dataset_path)?)?;
+    let problems: Vec<String> = dataset
+        .cases
+        .iter()
+        .filter_map(|case| case.problem().map(|p| format!("  {}: {p}", case.id)))
+        .collect();
+    if !problems.is_empty() {
+        eprintln!(
+            "{dataset_path} has cases that cannot run:\n{}",
+            problems.join("\n")
+        );
+        std::process::exit(1);
+    }
     println!("{} cases from {dataset_path}", dataset.cases.len());
 
     let host = cerno_host::connect(
@@ -627,6 +678,57 @@ mod tests {
 
     /// The table is read in a terminal as often as in a renderer, so every row — the rule
     /// included — has to be the same width. Pinned character for character.
+    fn case(json: serde_json::Value) -> Case {
+        let mut base = serde_json::json!({"id": "c", "state": "s"});
+        base.as_object_mut()
+            .unwrap()
+            .extend(json.as_object().unwrap().clone());
+        serde_json::from_value(base).unwrap()
+    }
+
+    /// The checked-in dataset is what `cargo run -p cerno-bench` uses; it has to pass its own check.
+    #[test]
+    fn every_shipped_case_can_run() {
+        let text = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("dataset.json"),
+        )
+        .unwrap();
+        let dataset: Dataset = serde_json::from_str(&text).unwrap();
+
+        for case in &dataset.cases {
+            assert_eq!(case.problem(), None, "{}", case.id);
+        }
+    }
+
+    #[test]
+    fn a_case_that_could_not_be_scored_is_found_before_running() {
+        let bad = [
+            serde_json::json!({}),
+            serde_json::json!({"noul": "a?", "choice": {"options": ["x", "y"]}, "expect_yes": true}),
+            serde_json::json!({"noul": "a?"}),
+            serde_json::json!({"choice": {"options": ["x", "y"]}}),
+            serde_json::json!({"choice": {"options": ["x", "y"]}, "expect": 2}),
+            serde_json::json!({"choice": {"options": []}, "expect": 0}),
+            // Score levels are 1-based; 0 would have underflowed computing the label.
+            serde_json::json!({"score": {"levels": 5}, "expect": 0}),
+            serde_json::json!({"score": {"levels": 5}, "expect": 6}),
+        ];
+        for json in bad {
+            assert!(
+                case(json.clone()).problem().is_some(),
+                "{json} was accepted"
+            );
+        }
+
+        for good in [
+            serde_json::json!({"noul": "a?", "expect_yes": false}),
+            serde_json::json!({"choice": {"options": ["x", "y"]}, "expect": 1}),
+            serde_json::json!({"score": {"levels": 5}, "expect": 5}),
+        ] {
+            assert_eq!(case(good.clone()).problem(), None, "{good}");
+        }
+    }
+
     #[test]
     fn table_columns_line_up_exactly() {
         let table = markdown_table(
