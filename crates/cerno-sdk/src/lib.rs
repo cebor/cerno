@@ -63,9 +63,10 @@ pub enum Error {
         question_id: Option<String>,
     },
 
-    /// A non-2xx response that was not shaped like an `ErrorResponse` — a proxy or a gateway
-    /// between client and service, most likely.
-    #[error("cerno returned {status}: {body}")]
+    /// A response that was not shaped like anything cerno sends — a proxy or a gateway between
+    /// client and service, most likely. `body` is kept whole; the message shows its start, as
+    /// the Python and TypeScript clients do, so a gateway's HTML page does not fill a log line.
+    #[error("cerno returned {status}: {}", excerpt(.body))]
     Unexpected { status: u16, body: String },
 
     #[error("no answer for question {0:?}")]
@@ -77,6 +78,16 @@ pub enum Error {
         expected: &'static str,
         actual: &'static str,
     },
+}
+
+/// How much of an unexpected body an error message shows.
+const MAX_EXCERPT: usize = 200;
+
+fn excerpt(body: &str) -> String {
+    match body.char_indices().nth(MAX_EXCERPT) {
+        Some((cut, _)) => format!("{}…", &body[..cut]),
+        None => body.to_string(),
+    }
 }
 
 #[derive(Clone)]
@@ -180,5 +191,40 @@ async fn decode<T: serde::de::DeserializeOwned>(response: reqwest::Response) -> 
             status: status.as_u16(),
             body,
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_unexpected_body_is_shortened_in_the_message_and_kept_whole() {
+        let body = format!("<html>{}</html>", "x".repeat(5000));
+        let error = Error::Unexpected {
+            status: 502,
+            body: body.clone(),
+        };
+
+        let message = error.to_string();
+        assert!(message.chars().count() < 250, "{message}");
+        assert!(message.ends_with('…'), "{message}");
+        let Error::Unexpected { body: kept, .. } = error else {
+            unreachable!()
+        };
+        assert_eq!(kept, body);
+    }
+
+    #[test]
+    fn a_short_unexpected_body_is_shown_whole() {
+        let error = Error::Unexpected {
+            status: 503,
+            body: "<html>service unavailable</html>".into(),
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "cerno returned 503: <html>service unavailable</html>"
+        );
     }
 }
