@@ -12,6 +12,11 @@
 //! Usage:
 //!   cerno-bench --models a,b,c [--reference m] [--dataset p] [--out p] [--host url]
 //!               [--host-kind ollama|openai|vllm|llamacpp|lmstudio]
+//!               [--systemone a,b,c] [--systemone-host url]
+//!
+//! `--systemone` runs the listed models through Ollama's `/v1/systemone` via cerno's `systemone`
+//! host instead of its letter prompt, at `--systemone-host` (Ollama's default address unless
+//! given). Those rows are measured for comparison and never picked as the verdict.
 //!
 //! An API key for the OpenAI-compatible hosts comes from `CERNO_HOST_API_KEY`.
 
@@ -138,8 +143,9 @@ impl Case {
 /// One model's result on one case.
 struct Outcome {
     primitive: &'static str,
-    /// `None` when the model produced no usable label at all.
-    answer: Option<Answer>,
+    /// The yes-probability of an answered noul case; `None` for any other primitive and for a
+    /// case that produced no answer.
+    yes: Option<f64>,
     /// Whether the most likely first token was one of the offered labels. An answer can exist
     /// without this: the engine reads any label in the top 20 and renormalises, so a model that
     /// opens with `**` or `The` still gets an answer, and a confident-looking one.
@@ -197,7 +203,10 @@ async fn run_case(engine: &Engine, model: &str, case: &Case) -> Outcome {
             Outcome {
                 primitive: case.primitive(),
                 truncated: answer.truncated(),
-                answer: Some(answer),
+                yes: match &answer {
+                    Answer::Noul { noul, .. } => Some(*noul),
+                    _ => None,
+                },
                 faithful,
                 correct,
                 logprobs,
@@ -210,7 +219,7 @@ async fn run_case(engine: &Engine, model: &str, case: &Case) -> Outcome {
             eprintln!("  {} {}: {}", case.id, case.primitive(), err);
             Outcome {
                 primitive: case.primitive(),
-                answer: None,
+                yes: None,
                 faithful: false,
                 correct: false,
                 logprobs: BTreeMap::new(),
@@ -281,17 +290,25 @@ fn brier(outcomes: &[Outcome], cases: &[Case]) -> f64 {
     let mut total = 0.0;
     let mut n = 0;
     for (outcome, case) in outcomes.iter().zip(cases) {
-        if let Some(Answer::Noul { noul, .. }) = &outcome.answer {
+        if let Some(yes) = outcome.yes {
             let truth = if case.expect_yes.unwrap() { 1.0 } else { 0.0 };
-            total += (noul - truth).powi(2);
+            total += (yes - truth).powi(2);
             n += 1;
         }
     }
     if n == 0 { f64::NAN } else { total / n as f64 }
 }
 
+/// Which path answered: cerno's engine, or Ollama's own `/v1/systemone`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Via {
+    Engine,
+    SystemOne,
+}
+
 struct Report {
     model: String,
+    via: Via,
     fidelity: f64,
     accuracy: f64,
     per_primitive: BTreeMap<&'static str, f64>,
@@ -304,7 +321,7 @@ struct Report {
     picked: Vec<Option<String>>,
 }
 
-fn summarise(model: &str, outcomes: &[Outcome], cases: &[Case]) -> Report {
+fn summarise(model: &str, via: Via, outcomes: &[Outcome], cases: &[Case]) -> Report {
     let n = outcomes.len() as f64;
 
     let mut latencies: Vec<u128> = outcomes.iter().map(|o| o.latency.as_millis()).collect();
@@ -324,14 +341,22 @@ fn summarise(model: &str, outcomes: &[Outcome], cases: &[Case]) -> Report {
 
     let (best_t, _) = fit_temperature(outcomes);
 
+    // `/v1/systemone` returns probabilities over the offered answers only: there is no token
+    // ranking to check the top of, and no window for a label to fall out of.
+    let share = |count: usize| match via {
+        Via::Engine => count as f64 / n,
+        Via::SystemOne => f64::NAN,
+    };
+
     Report {
         model: model.to_string(),
-        fidelity: outcomes.iter().filter(|o| o.faithful).count() as f64 / n,
+        via,
+        fidelity: share(outcomes.iter().filter(|o| o.faithful).count()),
         accuracy: outcomes.iter().filter(|o| o.correct).count() as f64 / n,
         per_primitive,
         p50: percentile(&latencies, 0.50),
         p99: percentile(&latencies, 0.99),
-        truncation: outcomes.iter().filter(|o| o.truncated).count() as f64 / n,
+        truncation: share(outcomes.iter().filter(|o| o.truncated).count()),
         brier: brier(outcomes, cases),
         best_t,
         agreement: None,
@@ -350,12 +375,11 @@ fn arg(args: &[String], name: &str) -> Option<String> {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
 
-    let models: Vec<String> = arg(&args, "--models")
-        .unwrap_or_else(|| "gemma4:e2b-it-qat,granite4:3b,phi4-mini:3.8b".into())
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
+    let models = list(
+        &arg(&args, "--models")
+            .unwrap_or_else(|| "gemma4:e2b-it-qat,granite4:3b,phi4-mini:3.8b".into()),
+    );
+    let systemone_models = list(&arg(&args, "--systemone").unwrap_or_default());
     let reference = arg(&args, "--reference");
     let dataset_path =
         arg(&args, "--dataset").unwrap_or_else(|| "crates/cerno-bench/dataset.json".into());
@@ -363,7 +387,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let host_kind: HostKind = arg(&args, "--host-kind")
         .unwrap_or_else(|| "ollama".into())
         .parse()?;
+    if host_kind == HostKind::SystemOne {
+        eprintln!(
+            "--host-kind systemone would report Ollama's /v1/systemone as cerno's own prompt; \
+             pass those models to --systemone instead"
+        );
+        std::process::exit(1);
+    }
     let host_url = arg(&args, "--host").unwrap_or_else(|| host_kind.default_url().into());
+    let systemone_url =
+        arg(&args, "--systemone-host").unwrap_or_else(|| HostKind::SystemOne.default_url().into());
 
     let dataset: Dataset = serde_json::from_str(&std::fs::read_to_string(&dataset_path)?)?;
     let problems: Vec<String> = dataset
@@ -389,48 +422,68 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Keep each model resident for the length of its run; unloading between cases would measure
     // model loading, not inference.
     let engine = Engine::new(host, Some("5m".to_string()));
+    let systemone = if systemone_models.is_empty() {
+        None
+    } else {
+        Some(Engine::new(
+            cerno_host::connect(
+                HostKind::SystemOne,
+                &systemone_url,
+                None,
+                Duration::from_secs(120),
+            )?,
+            Some("5m".to_string()),
+        ))
+    };
 
     let mut reports = Vec::new();
     let mut reference_picks: Option<Vec<Option<String>>> = None;
 
-    let all: Vec<String> = reference
+    let all: Vec<(String, Via)> = reference
         .iter()
-        .cloned()
-        .chain(models.iter().cloned())
+        .chain(&models)
+        .map(|m| (m.clone(), Via::Engine))
+        .chain(systemone_models.iter().map(|m| (m.clone(), Via::SystemOne)))
         .collect();
 
-    for model in &all {
-        println!("\n{model}");
+    for (model, via) in &all {
+        let (model, via) = (model.as_str(), *via);
 
         // Warm-up: the first call pays for loading the model into VRAM and would otherwise
         // dominate the p99. It is also where a misspelt model or an unreachable host shows:
         // measured anyway, every case would fail, the model would be reported at 0% fidelity for
         // a fault that is not its own, and the doc would be overwritten with that. A model that
         // answers without a letter is different — that is exactly what the run is here to count.
+        let mut outcomes = Vec::with_capacity(dataset.cases.len());
+        let (engine, name) = match via {
+            Via::Engine => (&engine, model.to_string()),
+            Via::SystemOne => (
+                systemone
+                    .as_ref()
+                    .expect("a systemone model means a systemone engine"),
+                format!("{model} via /v1/systemone"),
+            ),
+        };
+        println!("\n{name}");
         let warm_up = engine
             .answer(
                 "warm up",
-                &Question {
-                    id: "warmup".into(),
-                    kind: QuestionKind::Noul("Is this a warm-up?".into()),
-                },
+                &warm_up_question(),
                 model,
                 Calibration::default(),
             )
             .await;
         if let Err(err @ (EngineError::Host(_) | EngineError::UnknownModel { .. })) = warm_up {
-            eprintln!("{model}: the warm-up failed, so nothing was measured or written: {err}");
+            eprintln!("{name}: the warm-up failed, so nothing was measured or written: {err}");
             std::process::exit(1);
         }
-
-        let mut outcomes = Vec::with_capacity(dataset.cases.len());
         for case in &dataset.cases {
-            outcomes.push(run_case(&engine, model, case).await);
+            outcomes.push(run_case(engine, model, case).await);
         }
 
-        let mut report = summarise(model, &outcomes, &dataset.cases);
+        let mut report = summarise(model, via, &outcomes, &dataset.cases);
 
-        if reference.as_deref() == Some(model.as_str()) {
+        if via == Via::Engine && reference.as_deref() == Some(model) {
             reference_picks = Some(report.picked.clone());
         } else if let Some(reference_picks) = &reference_picks {
             let agreed = report
@@ -443,9 +496,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         println!(
-            "  fidelity {:.0}%  accuracy {:.0}%  p50 {}ms  p99 {}ms  best T {:.2}",
-            report.fidelity * 100.0,
-            report.accuracy * 100.0,
+            "  fidelity {}  accuracy {}  p50 {}ms  p99 {}ms  best T {:.2}",
+            pct(report.fidelity),
+            pct(report.accuracy),
             report.p50,
             report.p99,
             report.best_t
@@ -463,6 +516,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// A comma-separated model list, blanks dropped, so `--models ""` means none.
+fn list(value: &str) -> Vec<String> {
+    value
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// Sent once per model before measuring, on either path, and discarded.
+fn warm_up_question() -> Question {
+    Question {
+        id: "warmup".into(),
+        kind: QuestionKind::Noul("Is this a warm-up?".into()),
+    }
+}
+
 fn pct(v: f64) -> String {
     if v.is_nan() {
         "—".into()
@@ -474,10 +544,12 @@ fn pct(v: f64) -> String {
 /// The best candidate: highest accuracy among models whose top token was an offered label in
 /// every case, ties broken by median latency. Fidelity is a gate first — a model cerno cannot read is
 /// not a candidate at any accuracy — and the reference is excluded, since it is the yardstick
-/// rather than an option.
+/// rather than an option. A `/v1/systemone` row is never a candidate: it measured Ollama's path,
+/// and the verdict names a model for cerno's.
 fn pick_winner<'a>(reports: &'a [Report], reference: Option<&str>) -> Option<&'a Report> {
     reports
         .iter()
+        .filter(|r| r.via == Via::Engine)
         .filter(|r| Some(r.model.as_str()) != reference)
         .filter(|r| r.fidelity >= 1.0)
         .min_by(|a, b| {
@@ -600,6 +672,7 @@ fn render(reports: &[Report], dataset: &Dataset, reference: Option<&str>) -> Str
     ];
 
     let mut reference_seen = false;
+    let mut systemone_seen = false;
     let rows: Vec<Vec<String>> = reports
         .iter()
         .map(|r| {
@@ -607,11 +680,18 @@ fn render(reports: &[Report], dataset: &Dataset, reference: Option<&str>) -> Str
             // "(reference)": the model column already holds the widest values in the table, and
             // a parenthetical there widened it by half again and left the column ragged. Not a
             // dagger: it reads as a cross to anyone who hasn't met it as a footnote mark.
-            let is_reference = Some(r.model.as_str()) == reference;
+            let is_reference = r.via == Via::Engine && Some(r.model.as_str()) == reference;
+            let is_systemone = r.via == Via::SystemOne;
             reference_seen |= is_reference;
+            systemone_seen |= is_systemone;
 
             vec![
-                format!("`{}`{}", r.model, if is_reference { " ¹" } else { "" }),
+                format!(
+                    "`{}`{}{}",
+                    r.model,
+                    if is_reference { " ¹" } else { "" },
+                    if is_systemone { " ²" } else { "" }
+                ),
                 pct(r.fidelity),
                 pct(r.accuracy),
                 pct(r.per_primitive.get("noul").copied().unwrap_or(f64::NAN)),
@@ -633,6 +713,15 @@ fn render(reports: &[Report], dataset: &Dataset, reference: Option<&str>) -> Str
         out.push_str(
             "\n¹ Reference model — the yardstick the Agreement column is measured against, \
              not a candidate.\n",
+        );
+    }
+
+    if systemone_seen {
+        out.push_str(
+            "\n² Answered by Ollama's own `/v1/systemone` endpoint, not by cerno's engine: Ollama \
+             builds the model's prompt and returns probabilities over the offered answers only. \
+             Fidelity and Truncated do not apply, Best T is fitted to those probabilities, and \
+             the row is not a candidate for the verdict.\n",
         );
     }
 
@@ -805,5 +894,31 @@ mod tests {
         let table = markdown_table(&["T"], &[vec!["a-very-long-value".into()]]);
 
         assert!(table.starts_with("| T                 |\n"), "{table}");
+    }
+
+    #[test]
+    fn a_systemone_row_never_wins_the_verdict() {
+        let report = |model: &str, via, fidelity, accuracy| Report {
+            model: model.into(),
+            via,
+            fidelity,
+            accuracy,
+            per_primitive: BTreeMap::new(),
+            p50: 10,
+            p99: 10,
+            truncation: 0.0,
+            brier: 0.0,
+            best_t: 1.0,
+            agreement: None,
+            picked: Vec::new(),
+        };
+        let reports = [
+            report("nimble", Via::SystemOne, 1.0, 1.0),
+            report("granite4:3b", Via::Engine, 1.0, 0.5),
+        ];
+
+        let winner = pick_winner(&reports, None).unwrap();
+        assert_eq!(winner.model, "granite4:3b");
+        assert_eq!(winner.via, Via::Engine);
     }
 }

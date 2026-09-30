@@ -447,6 +447,83 @@ async fn an_openai_compatible_host_answers_the_same_request() {
     assert_eq!(body["answers"]["team"]["choice"], "Facility", "{body}");
 }
 
+/// With `CERNO_HOST=systemone` every question goes to Ollama's `/v1/systemone` as itself, and
+/// cerno's own response comes back unchanged in shape.
+#[tokio::test]
+async fn the_systemone_host_answers_every_primitive() {
+    let mut server = mockito::Server::new_async().await;
+    let mut mocks = Vec::new();
+    for (id, ask, answer) in [
+        (
+            "urgent",
+            json!({"type": "noul", "instructions": "Is this urgent?"}),
+            json!({"type": "noul", "noul": 0.9}),
+        ),
+        (
+            "team",
+            json!({"type": "choice", "criteria": {"IT": null, "Facility": null, "HR": null}}),
+            json!({"type": "choice", "choice": "Facility",
+                   "probabilities": {"IT": 0.1, "Facility": 0.8, "HR": 0.1}}),
+        ),
+        (
+            "sev",
+            json!({"type": "score", "criteria": ["1", "2", "3", "4"]}),
+            json!({"type": "score", "score": 1.7,
+                   "probabilities": {"0": 0.1, "1": 0.2, "2": 0.6, "3": 0.1}}),
+        ),
+    ] {
+        mocks.push(
+            server
+                .mock("POST", "/v1/systemone")
+                .match_body(mockito::Matcher::PartialJson(json!({
+                    "model": "gemma4:e2b-it-qat",
+                    "state": "Printer is jammed.",
+                    "questions": {id: ask},
+                })))
+                .with_header("content-type", "application/json")
+                .with_body(
+                    json!({"answers": {id: answer}, "usage": {"input_tokens": 100}}).to_string(),
+                )
+                .expect(1)
+                .create_async()
+                .await,
+        );
+    }
+
+    let mut config = config(&server.url(), false);
+    config.host = HostKind::SystemOne;
+
+    let (status, body) = post(
+        app(config),
+        "/v1/systemone",
+        json!({
+            "state": "Printer is jammed.",
+            "questions": [
+                {"id": "urgent", "noul": "Is this urgent?"},
+                {"id": "team", "choice": {"question": "Which team?", "options": ["IT", "Facility", "HR"]}},
+                {"id": "sev", "score": {"question": "How severe?", "levels": 4}}
+            ]
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    for mock in mocks {
+        mock.assert_async().await;
+    }
+    let answers = &body["answers"];
+    assert!(
+        (answers["urgent"]["noul"].as_f64().unwrap() - 0.9).abs() < 1e-9,
+        "{body}"
+    );
+    assert_eq!(answers["team"]["choice"], "Facility");
+    assert_eq!(answers["sev"]["score"], 3);
+    for id in ["urgent", "team", "sev"] {
+        assert_eq!(answers[id]["truncated"], false, "{id}: {body}");
+    }
+    assert_eq!(body["usage"]["input_tokens"], 300);
+}
+
 /// A refused connection and a host that never answers are different faults, and a caller that
 /// retries needs to tell them apart: one means Ollama is not running, the other means it is busy
 /// or wedged.

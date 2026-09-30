@@ -5,7 +5,7 @@
 //! folding token variants, substituting the floor, calibrating, normalising — is shared.
 
 use crate::{labels, math, prompt};
-use cerno_host::{FirstTokenDistribution, FirstTokenRequest, HostError, ModelHost};
+use cerno_host::{FirstTokenDistribution, FirstTokenRequest, HostError, ModelHost, Offer, Shape};
 use cerno_types::{
     Answer, Calibration, ErrorCode, LevelProbability, MAX_LEVELS, MAX_OPTIONS, MAX_QUESTIONS,
     MIN_LEVELS, OptionProbability, Question, QuestionKind, SystemOneRequest,
@@ -90,6 +90,8 @@ struct Ballot<'a> {
     question: Option<&'a str>,
     /// The option texts shown to the model, in request order.
     options: Vec<String>,
+    /// How the options relate, for a host that is asked questions rather than prompts.
+    shape: Shape,
 }
 
 /// One question's resolved distribution over its labels.
@@ -398,6 +400,16 @@ impl Engine {
                 user: prompt::user_turn(state, ballot.question, &lettered),
                 top_logprobs: self.max_options(),
                 keep_alive: self.keep_alive.clone(),
+                offer: Offer {
+                    question_id: question_id.to_string(),
+                    state: state.to_string(),
+                    question: ballot.question.map(str::to_string),
+                    shape: ballot.shape,
+                    options: lettered
+                        .iter()
+                        .map(|(l, t)| (l.to_string(), t.to_string()))
+                        .collect(),
+                },
             })
             .await
             .map_err(|error| match error {
@@ -427,14 +439,17 @@ fn ballot_for(kind: &QuestionKind) -> Ballot<'_> {
         QuestionKind::Noul(question) => Ballot {
             question: Some(question),
             options: vec!["Yes".to_string(), "No".to_string()],
+            shape: Shape::YesNo,
         },
         QuestionKind::Choice(spec) => Ballot {
             question: asked(&spec.question),
             options: spec.options.clone(),
+            shape: Shape::Pick,
         },
         QuestionKind::Score(spec) => Ballot {
             question: asked(&spec.question),
             options: spec.levels.legend(),
+            shape: Shape::Scale,
         },
     }
 }

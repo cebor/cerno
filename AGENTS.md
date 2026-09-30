@@ -61,6 +61,22 @@ endpoint, are the two open questions. A host without logprobs fails loudly as `N
 One host per process, chosen by `CERNO_HOST` through `cerno_host::connect`. A second runtime
 is a second instance, not a routing table.
 
+## `systemone` is a host that is asked questions, not prompts
+
+`crates/cerno-host/src/systemone.rs` sends each question to Ollama's `/v1/systemone`, where
+Ollama writes the prompt for its decision models (`nimble`, `tev1`). It reads
+`FirstTokenRequest::offer` — the question id, state, text, `Shape` and `(label, text)` options —
+and ignores the rendered prompt. It answers with a distribution whose tokens are exactly the
+offered labels at `ln p` (clamped at `1e-12`, since `raw_logprobs` is JSON and JSON has no
+`-inf`), so folding, calibration, normalising and confidence stay on the one engine path and
+`truncated` is always false. Score probabilities come back keyed `"0".."n-1"`; the endpoint's
+`score`, `choice` and `confidence` are not read, because cerno picks by argmax and computes its
+own. A choice or score without a question gets a neutral instruction, because the endpoint
+refuses an empty one.
+
+Choice options go out through the hand-written `NullCriteria` to keep their order — do not enable
+serde_json's `preserve_order`, feature unification would reorder JSON workspace-wide.
+
 ## Labels are single capital letters, and that is not cosmetic
 
 `crates/cerno-core/src/labels.rs`. Word labels do not survive tokenisation: measured on
@@ -163,6 +179,14 @@ ties by p50), so the verdict in the generated doc stays true when the benchmark 
 The verdict's sentence about calibration comes from `calibration_reading`, not from the
 template, for the same reason: it has to fit whichever temperature the winner turns out to have.
 
+`--systemone` adds rows answered by Ollama's own `/v1/systemone` for the decision models built
+for it (`nimble`, `tev1`), through the same `SystemOneHost` the service uses and a second
+`Engine`, so accuracy, agreement and the temperature fit compare like with like. Fidelity and
+Truncated are `NaN` there — the adapter's top token is always a label, so fidelity would be a
+meaningless 100% — and `pick_winner` filters on `Via::Engine` explicitly rather than relying on
+`NaN >= 1.0` being false. `--host-kind systemone` is refused, because it would report Ollama's
+prompt as cerno's own.
+
 ## Two things that will bite in a live test
 
 - **Logprobs are not bit-reproducible.** Identical requests return values differing in the third
@@ -244,5 +268,7 @@ with `-D warnings`, so a broken intra-doc link fails a push rather than the depl
 
 ## Host ceilings
 
-Every adapter reports `max_top_logprobs: 20` today. llama.cpp's own ceiling is higher, which is
-why `Engine` takes the minimum of that and `MAX_OPTIONS` rather than hard-coding 20.
+The token adapters report `max_top_logprobs: 20` today. llama.cpp's own ceiling is higher, which
+is why `Engine` takes the minimum of that and `MAX_OPTIONS` rather than hard-coding 20.
+`SystemOneHost` reports 26, the endpoint's option limit, since it returns a probability for every
+offered answer; the same minimum keeps a choice at 20.

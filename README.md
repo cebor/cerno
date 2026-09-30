@@ -196,14 +196,23 @@ would be the copy that drifts.
 
 | Model                        | Fidelity | Accuracy | p50 (ms) | Brier | Best T |
 |:-----------------------------|---------:|---------:|---------:|------:|-------:|
-| `gemma4:26b-a4b-it-q4_K_M` ¹ |     100% |      97% |      107 | 0.029 |   3.20 |
-| `gemma4:e2b-it-qat`          |     100% |      97% |       43 | 0.006 |   0.80 |
-| `granite4:3b`                |     100% |      81% |       35 | 0.168 |   2.10 |
-| `phi4-mini:3.8b`             |     100% |      86% |       28 | 0.023 |   2.25 |
+| `gemma4:26b-a4b-it-q4_K_M` ¹ |     100% |      97% |       64 | 0.029 |   3.20 |
+| `gemma4:e2b-it-qat`          |     100% |      97% |       30 | 0.005 |   0.80 |
+| `granite4:3b`                |     100% |      81% |       26 | 0.168 |   2.10 |
+| `phi4-mini:3.8b`             |     100% |      86% |       22 | 0.023 |   2.25 |
+| `nimble`                     |     100% |      97% |      124 | 0.014 |   0.65 |
+| `tev1`                       |     100% |      94% |      122 | 0.030 |   0.25 |
+| `tev1:0.8b`                  |     100% |      78% |       35 | 0.070 |   0.65 |
+| `nimble` ²                   |        — |     100% |       92 | 0.008 |   0.70 |
+| `tev1` ²                     |        — |     100% |       90 | 0.016 |   0.60 |
+| `tev1:0.8b` ²                |        — |      86% |       39 | 0.075 |   0.45 |
 
 ¹ Reference model — the yardstick, not a candidate. A snapshot of the generated document above;
 latency depends on hardware and on what else is holding VRAM, so it moves between runs while
 the accuracy and calibration columns stay put.
+
+² Answered by Ollama's own `/v1/systemone` endpoint rather than cerno's engine. Not a candidate
+for the verdict; see below.
 
 The 4 GB model matches the 26B reference's accuracy on a quarter of the footprint, several
 times faster, and is *better* calibrated: the large model needs its logits flattened by 3.2
@@ -214,6 +223,23 @@ token was one of the offered letters. An answer can be read off a letter further
 ranking even when the model was about to write prose, and it looks just as confident, so a
 model below 100% is not a candidate regardless of its accuracy or speed.
 
+**Ollama's decision models can be measured on their own path.** `nimble` and `tev1` ship with
+Ollama's `POST /v1/systemone`, where Ollama writes the prompt and returns probabilities over the
+offered answers. `--systemone nimble,tev1` runs the same dataset through that endpoint and adds
+rows marked ²; `--systemone-host url` points it elsewhere (Ollama's default address otherwise,
+whatever `--host` the engine rows use):
+
+```bash
+cargo run -p cerno-bench -- --reference gemma4:26b-a4b-it-q4_K_M \
+  --models gemma4:e2b-it-qat,nimble,tev1 --systemone nimble,tev1
+```
+
+The service can answer through that endpoint too: `CERNO_HOST=systemone` sends every question to
+Ollama's `/v1/systemone` instead of cerno's letter prompt (see [Hosts](#hosts)). With any other
+host, a decision model set as `CERNO_DEFAULT_MODEL` is used like any other model, with letter
+labels and first-token logprobs — the unmarked rows. Fidelity and Truncated have no meaning on the
+² rows, which is why they are never picked as the verdict.
+
 ## Configuration
 
 Deployment knobs are environment variables; the model table is an optional TOML file
@@ -222,7 +248,7 @@ Deployment knobs are environment variables; the model table is an optional TOML 
 | Variable | Default | |
 |---|---|---|
 | `CERNO_BIND` | `127.0.0.1:3000` | Loopback only. cerno has no authentication; set `0.0.0.0:3000` only where the network is trusted |
-| `CERNO_HOST` | `ollama` | `ollama`, `vllm`, `llamacpp`, `lmstudio` or `openai` |
+| `CERNO_HOST` | `ollama` | `ollama`, `vllm`, `llamacpp`, `lmstudio`, `openai` or `systemone` |
 | `CERNO_HOST_URL` | depends on `CERNO_HOST` | See [Hosts](#hosts) |
 | `CERNO_HOST_API_KEY` | — | Bearer token for the OpenAI-compatible hosts |
 | `CERNO_DEFAULT_MODEL` | `gemma4:e2b-it-qat` | Alias or model name |
@@ -243,11 +269,17 @@ Deployment knobs are environment variables; the model table is an optional TOML 
 | `llamacpp` | `http://localhost:8080/v1` | `llama-server`; also sends `top_k: 0`, `min_p: 0`, `post_sampling_probs: false` |
 | `lmstudio` | `http://localhost:1234/v1` | Also sends `top_k: 0`, `min_p: 0` |
 | `openai` | `https://api.openai.com/v1` | Standard fields only, for any other compatible server |
+| `systemone` | `http://localhost:11434` | Ollama's `/v1/systemone`, which writes its own prompt; decision models (`nimble`, `tev1`) only |
 
 Every host must report `top_logprobs`; one that does not answers with a 502 that says so. The
 extra fields are there because a runtime that samples before it reports logprobs hands back a
 truncated distribution otherwise. `openai` cannot send them, so it is only as good as the
 server's own defaults.
+
+`systemone` asks the question itself rather than a prompt and gets a probability for every
+offered answer, so nothing is ever truncated. cerno's response, calibration and confidence stay
+the same. Set `CERNO_DEFAULT_MODEL` to a decision model with it: any other model answers 502 with
+Ollama's "not supported by System One".
 
 ```bash
 CERNO_HOST=vllm cargo run --release -p cerno-server

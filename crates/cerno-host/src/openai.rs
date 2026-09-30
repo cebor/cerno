@@ -300,6 +300,7 @@ mod tests {
             user: "usr".into(),
             top_logprobs,
             keep_alive: Some("5m".into()),
+            offer: crate::test_offer(),
         }
     }
 

@@ -350,6 +350,7 @@ mod tests {
             user: "usr".into(),
             top_logprobs: 20,
             keep_alive: Some("5m".into()),
+            offer: crate::test_offer(),
         };
 
         let json = serde_json::to_value(host.body(&req, Some(false))).unwrap();
@@ -372,6 +373,7 @@ mod tests {
             user: "usr".into(),
             top_logprobs: 99,
             keep_alive: None,
+            offer: crate::test_offer(),
         };
 
         let json = serde_json::to_value(host.body(&req, Some(false))).unwrap();
@@ -416,6 +418,7 @@ mod tests {
             user: "usr".into(),
             top_logprobs: 20,
             keep_alive: None,
+            offer: crate::test_offer(),
         };
 
         host.first_token(req.clone()).await.unwrap();

@@ -1,18 +1,23 @@
 //! The seam between cerno and whatever runs the model.
 //!
-//! A host knows nothing about Noul, Choice or Score. It answers exactly one question: given a
-//! prompt, what is the probability distribution over the *first* token the model would generate?
-//! All primitive logic lives in `cerno-core` and therefore holds for every host equally.
+//! A host knows nothing about Noul, Choice or Score beyond the [`Shape`] of what was offered,
+//! which only a host that takes questions rather than prompts reads. It answers exactly one
+//! question: given a prompt, what is the probability distribution over the *first* token the
+//! model would generate? All primitive logic lives in `cerno-core` and therefore holds for every
+//! host equally.
 //!
-//! Two adapters cover the runtimes: [`OllamaHost`] for Ollama's native API, and
-//! [`OpenAiCompatHost`] for everything speaking `/v1/chat/completions`. [`connect`] picks one
-//! from a [`HostKind`].
+//! Three adapters cover the runtimes: [`OllamaHost`] for Ollama's native API,
+//! [`OpenAiCompatHost`] for everything speaking `/v1/chat/completions`, and [`SystemOneHost`]
+//! for Ollama's `/v1/systemone`, which writes its own prompt for its decision models. [`connect`]
+//! picks one from a [`HostKind`].
 
 mod ollama;
 mod openai;
+mod systemone;
 
 pub use ollama::OllamaHost;
 pub use openai::{Flavour, OpenAiCompatHost};
+pub use systemone::SystemOneHost;
 
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -27,6 +32,8 @@ pub enum HostKind {
     Vllm,
     LlamaCpp,
     LmStudio,
+    /// Ollama's `/v1/systemone`, answered by its decision models (`nimble`, `tev1`).
+    SystemOne,
 }
 
 impl HostKind {
@@ -38,12 +45,13 @@ impl HostKind {
             HostKind::Vllm => "http://localhost:8000/v1",
             HostKind::LlamaCpp => "http://localhost:8080/v1",
             HostKind::LmStudio => "http://localhost:1234/v1",
+            HostKind::SystemOne => "http://localhost:11434",
         }
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("unknown host {0:?}; expected one of ollama, openai, vllm, llamacpp, lmstudio")]
+#[error("unknown host {0:?}; expected one of ollama, openai, vllm, llamacpp, lmstudio, systemone")]
 pub struct UnknownHostKind(String);
 
 impl std::str::FromStr for HostKind {
@@ -56,6 +64,7 @@ impl std::str::FromStr for HostKind {
             "vllm" => Ok(HostKind::Vllm),
             "llamacpp" | "llama.cpp" => Ok(HostKind::LlamaCpp),
             "lmstudio" => Ok(HostKind::LmStudio),
+            "systemone" => Ok(HostKind::SystemOne),
             _ => Err(UnknownHostKind(s.to_string())),
         }
     }
@@ -69,11 +78,13 @@ impl std::fmt::Display for HostKind {
             HostKind::Vllm => "vllm",
             HostKind::LlamaCpp => "llamacpp",
             HostKind::LmStudio => "lmstudio",
+            HostKind::SystemOne => "systemone",
         })
     }
 }
 
-/// Build the adapter for `kind`. Ollama takes no API key; the others send it as a bearer token.
+/// Build the adapter for `kind`. Ollama and its `/v1/systemone` take no API key; the others send
+/// it as a bearer token.
 pub fn connect(
     kind: HostKind,
     url: &str,
@@ -82,6 +93,7 @@ pub fn connect(
 ) -> Result<Arc<dyn ModelHost>, HostError> {
     let flavour = match kind {
         HostKind::Ollama => return Ok(Arc::new(OllamaHost::new(url, timeout)?)),
+        HostKind::SystemOne => return Ok(Arc::new(SystemOneHost::new(url, timeout)?)),
         HostKind::OpenAi => Flavour::Generic,
         HostKind::Vllm => Flavour::Vllm,
         HostKind::LlamaCpp => Flavour::LlamaCpp,
@@ -112,6 +124,35 @@ pub struct FirstTokenRequest {
     /// How long the host should keep the model resident after answering. Only Ollama has this;
     /// the OpenAI-compatible runtimes keep their model loaded for the life of the process.
     pub keep_alive: Option<String>,
+    /// The question behind `user`; see [`Offer`].
+    pub offer: Offer,
+}
+
+/// What the model was asked, before it was rendered into a prompt.
+///
+/// Token hosts ignore it and read `system`/`user`. A host that is asked questions rather than
+/// prompts — [`SystemOneHost`] — reads nothing else.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Offer {
+    /// The question's id, which the structured request keys its answer by.
+    pub question_id: String,
+    pub state: String,
+    /// The question text; `None` when a choice or score has none worth asking.
+    pub question: Option<String>,
+    pub shape: Shape,
+    /// `(label, text)` per option, in request order. A yes/no offer is `[("A","Yes"),("B","No")]`.
+    pub options: Vec<(String, String)>,
+}
+
+/// How the offered options relate to each other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Shape {
+    /// Two options, "Yes" first.
+    YesNo,
+    /// Any one of the options.
+    Pick,
+    /// Ordered levels, lowest first.
+    Scale,
 }
 
 /// The distribution over the first generated token.
@@ -238,6 +279,18 @@ pub trait ModelHost: Send + Sync {
     ) -> Result<FirstTokenDistribution, HostError>;
 }
 
+/// A small `Pick` offer for tests that only need one to exist.
+#[cfg(test)]
+pub(crate) fn test_offer() -> Offer {
+    Offer {
+        question_id: "q".into(),
+        state: "s".into(),
+        question: Some("Which?".into()),
+        shape: Shape::Pick,
+        options: vec![("A".into(), "x".into()), ("B".into(), "y".into())],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -250,6 +303,7 @@ mod tests {
             HostKind::Vllm,
             HostKind::LlamaCpp,
             HostKind::LmStudio,
+            HostKind::SystemOne,
         ] {
             assert_eq!(kind.to_string().parse::<HostKind>().unwrap(), kind);
         }
@@ -364,6 +418,12 @@ mod tests {
                 .unwrap()
                 .name(),
             "vllm"
+        );
+        assert_eq!(
+            connect(HostKind::SystemOne, "http://x", None, timeout)
+                .unwrap()
+                .name(),
+            "systemone"
         );
     }
 }

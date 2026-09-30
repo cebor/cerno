@@ -6,7 +6,7 @@
 
 use cerno_core::{Engine, EngineError};
 use cerno_host::{
-    FirstTokenDistribution, FirstTokenRequest, HostCapabilities, HostError, ModelHost,
+    FirstTokenDistribution, FirstTokenRequest, HostCapabilities, HostError, ModelHost, Offer, Shape,
 };
 use cerno_types::{
     Answer, Calibration, ChoiceSpec, ErrorCode, LevelSpec, MAX_QUESTIONS, Question, QuestionKind,
@@ -30,6 +30,10 @@ impl ScriptedHost {
 
     fn last_prompt(&self) -> String {
         self.seen.lock().unwrap().last().unwrap().user.clone()
+    }
+
+    fn last_offer(&self) -> Offer {
+        self.seen.lock().unwrap().last().unwrap().offer.clone()
     }
 }
 
@@ -511,6 +515,71 @@ async fn a_blank_question_leaves_no_question_line() {
         "{}",
         host.last_prompt()
     );
+}
+
+/// A host that is asked questions rather than prompts gets the question as the engine saw it.
+#[tokio::test]
+async fn every_question_reaches_the_host_as_an_offer() {
+    let (engine, host) = engine(&[("A", -0.1), ("B", -2.0), ("C", -3.0)]);
+    let pairs = |pairs: &[(&str, &str)]| -> Vec<(String, String)> {
+        pairs
+            .iter()
+            .map(|(l, t)| (l.to_string(), t.to_string()))
+            .collect()
+    };
+
+    engine
+        .answer(
+            "Printer is jammed.",
+            &noul("urgent", "Is this urgent?"),
+            "m",
+            Calibration::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        host.last_offer(),
+        Offer {
+            question_id: "urgent".into(),
+            state: "Printer is jammed.".into(),
+            question: Some("Is this urgent?".into()),
+            shape: Shape::YesNo,
+            options: pairs(&[("A", "Yes"), ("B", "No")]),
+        }
+    );
+
+    let unasked = Question {
+        id: "team".into(),
+        kind: QuestionKind::Choice(ChoiceSpec {
+            question: Some("  ".into()),
+            options: vec!["IT".into(), "HR".into()],
+        }),
+    };
+    engine
+        .answer("A ticket.", &unasked, "m", Calibration::default())
+        .await
+        .unwrap();
+    let offer = host.last_offer();
+    assert_eq!(offer.shape, Shape::Pick);
+    assert_eq!(offer.question, None);
+    assert_eq!(offer.question_id, "team");
+    assert_eq!(offer.state, "A ticket.");
+    assert_eq!(offer.options, pairs(&[("A", "IT"), ("B", "HR")]));
+
+    engine
+        .answer(
+            "A ticket.",
+            &score("sev", LevelSpec::Count(3)),
+            "m",
+            Calibration::default(),
+        )
+        .await
+        .unwrap();
+    let offer = host.last_offer();
+    assert_eq!(offer.shape, Shape::Scale);
+    assert_eq!(offer.question.as_deref(), Some("How severe?"));
+    assert_eq!(offer.question_id, "sev");
+    assert_eq!(offer.options, pairs(&[("A", "1"), ("B", "2"), ("C", "3")]));
 }
 
 // -------------------------------------------------------------------------------------------
