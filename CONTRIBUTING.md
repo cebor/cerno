@@ -35,7 +35,7 @@ loads the model, 5–10 s cold against ~40 ms warm.
 
 ## Before you change something
 
-[CLAUDE.md](CLAUDE.md) is the long version, written for humans and coding agents alike. The
+[AGENTS.md](AGENTS.md) is the long version, written for humans and coding agents alike. The
 short version:
 
 - **The sampling options in `cerno-host` are correctness conditions.** `top_k: 0, top_p: 1,
@@ -94,7 +94,7 @@ cases.
 A green suite has let through bugs that only showed up in the running binary. For anything
 touching input handling, drive the real binary in a pty (`pty.openpty`, with `TIOCSWINSZ` set,
 or it draws nothing) and read the final screen. Do not use `script` for this: it doubles
-stdin, which looks exactly like an application bug. Details in [CLAUDE.md](CLAUDE.md).
+stdin, which looks exactly like an application bug. Details in [AGENTS.md](AGENTS.md).
 
 ## Things to ask about first
 
@@ -138,7 +138,7 @@ now.
   all SDKs together — splitting them would leave commits where the clients disagree with the
   service, which is exactly what the conformance cases exist to rule out.
 - **Docs change with the code they describe.** If a change makes a sentence in the README or
-  CLAUDE.md untrue, fix the sentence in the same commit.
+  AGENTS.md untrue, fix the sentence in the same commit.
 - Review fixes are folded into the commit they fix (`git commit --fixup`, then
   `git rebase -i --autosquash main`) rather than piled on top as "address review".
 
@@ -164,7 +164,7 @@ Changelog: fixed
 - **Body:** wrapped at 72 columns, and says **why**: what was wrong, what was measured or tried,
   and why this fix over the alternatives. A number you measured beats an adjective.
 - A bug found along the way, or a trap the next person would fall into, belongs in the body —
-  and, if it will outlive the commit, in CLAUDE.md too.
+  and, if it will outlive the commit, in AGENTS.md too.
 - Written in English, like the rest of the repository.
 
 ### The changelog trailer
