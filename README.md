@@ -189,32 +189,9 @@ every crate, with links to the Python and TypeScript READMEs, is under
 Started above. It points at `http://localhost:3000` unless `--url` or `CERNO_URL` says
 otherwise.
 
-```
-┌ State (1) ─────────────────────────────────┐┌ Answers ↓ ─────────────────────────────────┐
-│Ticket: Server room cooling failed,         ││urgent  noul 0.9934                         │
-│31 degrees and rising.                      ││  Is this urgent?                           │
-│                                            ││  A Yes ███████████████████████████▉   99.3%│
-│                                            ││  B No  ▏░░░░░░░░░░░░░░░░░░░░░░░░░░░    0.7%│
-│                                            ││                                            │
-│                                            ││team  choice → Facility  conf 0.971         │
-│                                            ││█████████▊                                  │
-└────────────────────────────────────────────┘│  Which team?                               │
-┌ Questions (2) ─────────────────────────────┐│  A IT       ▏░░░░░░░░░░░░░░░░░░░░░░    0.3%│
-│  urgent    noul   Is this urgent?          ││  B Facility ██████████████████████▉   99.5%│
-│  team      choice IT | Facility | HR       ││  C HR       ░░░░░░░░░░░░░░░░░░░░░░░    0.1%│
-│▸ sev       score  negligible | minor | mode││                                            │
-│  + add question  (a)                       ││sev  score → 5 "critical"  conf 0.774       │
-│                                            ││███████▊░░                                  │
-│                                            ││  How severe?                               │
-│                                            ││  expected 4.87                             │
-│                                            ││  A 1 negligible ░░░░░░░░░░░░░░░░░░░    0.2%│
-│                                            ││  B 2 minor      ▏░░░░░░░░░░░░░░░░░░    0.7%│
-│                                            ││  C 3 moderate   ▍░░░░░░░░░░░░░░░░░░    2.1%│
-│                                            ││  D 4 major      █░░░░░░░░░░░░░░░░░░    5.1%│
-│                                            ││  E 5 critical   █████████████████▍░   91.8%│
-└────────────────────────────────────────────┘└────────────────────────────────────────────┘
-http://localhost:3000 ● · default model · ^S send · ? help
-```
+<p align="center">
+  <img src="https://cebor.github.io/cerno/tui.png" width="840" alt="cerno-tui with the server-room ticket as state, three questions, and the answers as bars: urgent 99.3% yes, team Facility at 99.5%, severity critical at 91.8%">
+</p>
 
 Type a state, add questions with `a`, send with `Ctrl+S`. `Tab` moves between panes, `t` and
 `T` step the calibration temperature and `c` clears it, `m` cycles the models the service

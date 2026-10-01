@@ -249,6 +249,14 @@ instead — `pty.openpty`, `TIOCSWINSZ` for a real size, write keys on a schedul
 ANSI stream into a grid to read the final screen. Without the window size the program draws
 nothing at all and the capture is empty.
 
+`site/tui.png`, the screenshot in the README and on the website, is taken in nuntio
+(`../nuntio`, `cargo xtask drive`, headless) against a live `cerno-server`: an isolated
+`XDG_CONFIG_HOME` holding a seeded `cerno/last-session.json`, `theme = "Tokyo Night"`, font size
+20, `--size 1680x990` (104×25 cells), then `key ctrl+s`, `key tab down down`, `shot`. Start
+`cerno-tui` through `env -u NO_COLOR -u CI TERM=xterm-256color …`: nuntio passes its environment
+on, an agent's shell exports `NO_COLOR=1`, and the TUI honours it, so the first capture came out
+grey with nothing looking wrong. The README loads the image from the Pages URL, like the logo.
+
 ## One version, changed only by the release script
 
 The crates, both SDKs and `spec/openapi.json` all carry the same version. `scripts/release.sh

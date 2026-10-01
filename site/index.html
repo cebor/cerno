@@ -210,6 +210,22 @@ answers = (client.systemone(text)
       </div>
     </section>
 
+    <section id="tui">
+      <h2>The terminal front end</h2>
+      <p><code>curl</code> gives you the winner; <code>cerno-tui</code> shows you how close the
+      runner-up was, which is the difference between “Facility” and “Facility, but it was nearly
+      IT”. A run at a higher temperature next to one at 1.0 shows the calibration working
+      directly.</p>
+      <figure class="screenshot">
+        <img src="tui.png" width="1680" height="990" loading="lazy"
+             alt="cerno-tui with the server-room ticket as state, three questions, and the answers as bars: urgent 99.3% yes, team Facility at 99.5%, severity critical at 91.8%">
+      </figure>
+      <p class="note">Type a state, add questions with <kbd>a</kbd>, send with <kbd>Ctrl</kbd>+<kbd>S</kbd>.
+      <kbd>t</kbd> and <kbd>T</kbd> step the calibration temperature, <kbd>m</kbd> cycles the models
+      the service offers, <kbd>?</kbd> lists the keys. The form is saved on exit and comes back on
+      the next start.</p>
+    </section>
+
     <section id="hosts">
       <h2>Runs where your model runs</h2>
       <p>Every runtime gets the request fields that keep its distribution untruncated, and every

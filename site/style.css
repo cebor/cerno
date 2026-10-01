@@ -283,6 +283,26 @@ table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
 th, td { text-align: left; vertical-align: top; padding: 10px 12px 10px 0; border-top: 1px solid var(--border); }
 th { color: var(--muted); font-weight: 600; border-top: 0; }
 
+/* The TUI screenshot, taken in a dark terminal: the same frame in both colour schemes. */
+.screenshot { margin: 8px 0 12px; }
+.screenshot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 16px 40px -20px rgba(30, 27, 75, 0.6);
+}
+kbd {
+  font-family: var(--mono);
+  font-size: 0.82em;
+  padding: 0.05em 0.4em;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--panel);
+}
+
 /* Hosts */
 .hosts {
   list-style: none;
