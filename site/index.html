@@ -63,27 +63,27 @@
             <figcaption><span class="dots" aria-hidden="true"></span>Request · <code>POST /v1/systemone</code></figcaption>
 <pre><code><span class="c">curl</span> localhost:3000/v1/systemone \
   <span class="f">-H</span> <span class="s">'content-type: application/json'</span> <span class="f">-d</span> '{
-  <span class="k">"state"</span>: <span class="s">"Ticket: Serverraum-Klima ausgefallen, 31 Grad und steigend."</span>,
+  <span class="k">"state"</span>: <span class="s">"Ticket: Server room cooling failed, 31 degrees and rising."</span>,
   <span class="k">"questions"</span>: [
-    {<span class="k">"id"</span>: <span class="s">"urgent"</span>, <span class="k">"noul"</span>: <span class="s">"Ist das dringend?"</span>},
-    {<span class="k">"id"</span>: <span class="s">"team"</span>, <span class="k">"choice"</span>: {<span class="k">"question"</span>: <span class="s">"Welches Team?"</span>,
+    {<span class="k">"id"</span>: <span class="s">"urgent"</span>, <span class="k">"noul"</span>: <span class="s">"Is this urgent?"</span>},
+    {<span class="k">"id"</span>: <span class="s">"team"</span>, <span class="k">"choice"</span>: {<span class="k">"question"</span>: <span class="s">"Which team?"</span>,
                               <span class="k">"options"</span>: [<span class="s">"IT"</span>, <span class="s">"Facility"</span>, <span class="s">"HR"</span>]}},
-    {<span class="k">"id"</span>: <span class="s">"sev"</span>,  <span class="k">"score"</span>:  {<span class="k">"question"</span>: <span class="s">"Wie schwer?"</span>,
-       <span class="k">"levels"</span>: [<span class="s">"unkritisch"</span>, <span class="s">"gering"</span>, <span class="s">"mittel"</span>, <span class="s">"hoch"</span>, <span class="s">"kritisch"</span>]}}
+    {<span class="k">"id"</span>: <span class="s">"sev"</span>,  <span class="k">"score"</span>:  {<span class="k">"question"</span>: <span class="s">"How severe?"</span>,
+       <span class="k">"levels"</span>: [<span class="s">"negligible"</span>, <span class="s">"minor"</span>, <span class="s">"moderate"</span>, <span class="s">"major"</span>, <span class="s">"critical"</span>]}}
   ]}'</code></pre>
           </figure>
           <figure class="window">
-            <figcaption><span class="dots" aria-hidden="true"></span>Response, trimmed<span class="took">96&nbsp;ms</span></figcaption>
+            <figcaption><span class="dots" aria-hidden="true"></span>Response, trimmed<span class="took">85&nbsp;ms</span></figcaption>
 <pre><code>{<span class="k">"answers"</span>: {
-   <span class="k">"urgent"</span>: {<span class="k">"type"</span>: <span class="s">"noul"</span>,   <span class="k">"noul"</span>: <span class="n">0.9834</span>, <span class="k">"label_mass"</span>: <span class="n">0.998</span>},
+   <span class="k">"urgent"</span>: {<span class="k">"type"</span>: <span class="s">"noul"</span>,   <span class="k">"noul"</span>: <span class="n">0.9946</span>, <span class="k">"label_mass"</span>: <span class="n">0.999</span>},
    <span class="k">"team"</span>:   {<span class="k">"type"</span>: <span class="s">"choice"</span>, <span class="k">"choice"</span>: <span class="s">"Facility"</span>, <span class="k">"index"</span>: <span class="n">1</span>,
-              <span class="k">"confidence"</span>: <span class="n">0.978</span>, <span class="k">"label_mass"</span>: <span class="n">0.999</span>},
-   <span class="k">"sev"</span>:    {<span class="k">"type"</span>: <span class="s">"score"</span>,  <span class="k">"score"</span>: <span class="n">5</span>, <span class="k">"expected_score"</span>: <span class="n">4.80</span>,
-              <span class="k">"legend"</span>: <span class="s">"kritisch"</span>, <span class="k">"confidence"</span>: <span class="n">0.692</span>,
-              <span class="k">"label_mass"</span>: <span class="n">0.998</span>}},
+              <span class="k">"confidence"</span>: <span class="n">0.967</span>, <span class="k">"label_mass"</span>: <span class="n">0.999</span>},
+   <span class="k">"sev"</span>:    {<span class="k">"type"</span>: <span class="s">"score"</span>,  <span class="k">"score"</span>: <span class="n">5</span>, <span class="k">"expected_score"</span>: <span class="n">4.90</span>,
+              <span class="k">"legend"</span>: <span class="s">"critical"</span>, <span class="k">"confidence"</span>: <span class="n">0.807</span>,
+              <span class="k">"label_mass"</span>: <span class="n">0.999</span>}},
  <span class="k">"model"</span>: <span class="s">"gemma4:e2b-it-qat"</span>,
- <span class="k">"usage"</span>: {<span class="k">"input_tokens"</span>: <span class="n">297</span>, <span class="k">"questions"</span>: <span class="n">3</span>},
- <span class="k">"timing_ms"</span>: {<span class="k">"total"</span>: <span class="n">96</span>}}</code></pre>
+ <span class="k">"usage"</span>: {<span class="k">"input_tokens"</span>: <span class="n">281</span>, <span class="k">"questions"</span>: <span class="n">3</span>},
+ <span class="k">"timing_ms"</span>: {<span class="k">"total"</span>: <span class="n">85</span>}}</code></pre>
           </figure>
         </div>
 
@@ -91,8 +91,8 @@
           <p class="readout-title">Read as</p>
           <div class="answer">
             <p class="answer-head"><code>urgent</code><span>noul</span></p>
-            <p class="answer-value">0.9834</p>
-            <div class="meter" aria-hidden="true"><span style="width: 98.34%"></span></div>
+            <p class="answer-value">0.9946</p>
+            <div class="meter" aria-hidden="true"><span style="width: 99.46%"></span></div>
             <p class="answer-note">probability of yes</p>
           </div>
           <div class="answer">
@@ -102,19 +102,19 @@
               <li class="picked">Facility</li>
               <li>HR</li>
             </ul>
-            <p class="answer-note">confidence 0.978</p>
+            <p class="answer-note">confidence 0.967</p>
           </div>
           <div class="answer">
             <p class="answer-head"><code>sev</code><span>score</span></p>
-            <p class="answer-value">kritisch <small>5 of 5</small></p>
+            <p class="answer-value">critical <small>5 of 5</small></p>
             <ol class="levels" aria-hidden="true">
               <li></li><li></li><li></li><li></li><li class="picked"></li>
             </ol>
-            <p class="answer-note">expected 4.80 · confidence 0.692</p>
+            <p class="answer-note">expected 4.90 · confidence 0.807</p>
           </div>
         </div>
       </div>
-      <p class="note">Three questions, 96&nbsp;ms, on a 4&nbsp;GB model. <code>label_mass</code> is how
+      <p class="note">Three questions, 85&nbsp;ms, on a 4&nbsp;GB model. <code>label_mass</code> is how
       much of the model’s own probability fell on the offered letters — the one sign that it was
       about to write something else.</p>
     </section>

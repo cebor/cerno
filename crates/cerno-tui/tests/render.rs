@@ -51,18 +51,18 @@ fn answer_read_off_the_tail() -> Answers {
 fn app_with_answers() -> App {
     let mut app = App::new(
         Session {
-            state: "Ticket: Serverraum-Klima ausgefallen.".into(),
+            state: "Ticket: Server room cooling failed.".into(),
             questions: vec![
                 QuestionDraft {
                     id: "urgent".into(),
                     kind: Kind::Noul,
-                    question: "Ist das dringend?".into(),
+                    question: "Is this urgent?".into(),
                     ..Default::default()
                 },
                 QuestionDraft {
                     id: "team".into(),
                     kind: Kind::Choice,
-                    question: "Welches Team?".into(),
+                    question: "Which team?".into(),
                     options: "IT, Facility, HR".into(),
                     ..Default::default()
                 },
@@ -108,7 +108,7 @@ fn the_panes_and_the_state_text_are_on_screen() {
     assert!(contains(&lines, "State (1)"), "{lines:#?}");
     assert!(contains(&lines, "Questions (2)"));
     assert!(contains(&lines, "Answers"));
-    assert!(contains(&lines, "Serverraum-Klima"));
+    assert!(contains(&lines, "Server room cooling"));
 }
 
 #[test]
@@ -117,7 +117,7 @@ fn the_question_list_shows_each_id_kind_and_summary() {
 
     assert!(contains(&lines, "urgent"), "{lines:#?}");
     assert!(contains(&lines, "noul"));
-    assert!(contains(&lines, "Ist das dringend?"));
+    assert!(contains(&lines, "Is this urgent?"));
     assert!(contains(&lines, "IT | Facility | HR"));
     assert!(contains(&lines, "+ add question"));
 }
@@ -401,7 +401,7 @@ fn the_question_text_is_shown_under_its_answer() {
     let buffer = buffer_sized(&app_with_answers(), 120, 32);
 
     let headline = answers_row(&buffer, "noul 0.9911");
-    assert_eq!(answers_row(&buffer, "Ist das dringend?"), headline + 1);
+    assert_eq!(answers_row(&buffer, "Is this urgent?"), headline + 1);
 }
 
 #[test]

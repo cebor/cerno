@@ -14,13 +14,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("health: {}", client.health().await);
 
     let answers = client
-        .systemone("Ticket: Serverraum-Klima ausgefallen, 31 Grad und steigend.")
-        .noul("urgent", "Ist das dringend?")
-        .choice("team", "Welches Team?", ["IT", "Facility", "Personal"])
+        .systemone("Ticket: Server room cooling failed, 31 degrees and rising.")
+        .noul("urgent", "Is this urgent?")
+        .choice("team", "Which team?", ["IT", "Facility", "HR"])
         .score(
             "sev",
-            "Wie schwer?",
-            ["unkritisch", "gering", "mittel", "hoch", "kritisch"],
+            "How severe?",
+            ["negligible", "minor", "moderate", "major", "critical"],
         )
         .send()
         .await?;
