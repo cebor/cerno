@@ -57,33 +57,62 @@
 
     <section id="example">
       <h2>Three questions, one request</h2>
-      <div class="pair">
-        <figure>
-          <figcaption>Request</figcaption>
-<pre><code>curl localhost:3000/v1/systemone \
-  -H 'content-type: application/json' -d '{
-  "state": "Ticket: Serverraum-Klima ausgefallen, 31 Grad und steigend.",
-  "questions": [
-    {"id": "urgent", "noul": "Ist das dringend?"},
-    {"id": "team", "choice": {"question": "Welches Team?",
-                              "options": ["IT", "Facility", "HR"]}},
-    {"id": "sev",  "score":  {"question": "Wie schwer?",
-       "levels": ["unkritisch", "gering", "mittel", "hoch", "kritisch"]}}
+      <div class="exchange">
+        <div class="windows">
+          <figure class="window">
+            <figcaption><span class="dots" aria-hidden="true"></span>Request · <code>POST /v1/systemone</code></figcaption>
+<pre><code><span class="c">curl</span> localhost:3000/v1/systemone \
+  <span class="f">-H</span> <span class="s">'content-type: application/json'</span> <span class="f">-d</span> '{
+  <span class="k">"state"</span>: <span class="s">"Ticket: Serverraum-Klima ausgefallen, 31 Grad und steigend."</span>,
+  <span class="k">"questions"</span>: [
+    {<span class="k">"id"</span>: <span class="s">"urgent"</span>, <span class="k">"noul"</span>: <span class="s">"Ist das dringend?"</span>},
+    {<span class="k">"id"</span>: <span class="s">"team"</span>, <span class="k">"choice"</span>: {<span class="k">"question"</span>: <span class="s">"Welches Team?"</span>,
+                              <span class="k">"options"</span>: [<span class="s">"IT"</span>, <span class="s">"Facility"</span>, <span class="s">"HR"</span>]}},
+    {<span class="k">"id"</span>: <span class="s">"sev"</span>,  <span class="k">"score"</span>:  {<span class="k">"question"</span>: <span class="s">"Wie schwer?"</span>,
+       <span class="k">"levels"</span>: [<span class="s">"unkritisch"</span>, <span class="s">"gering"</span>, <span class="s">"mittel"</span>, <span class="s">"hoch"</span>, <span class="s">"kritisch"</span>]}}
   ]}'</code></pre>
-        </figure>
-        <figure>
-          <figcaption>Response, trimmed</figcaption>
-<pre><code>{"answers": {
-   "urgent": {"type": "noul",   "noul": 0.9834, "label_mass": 0.998},
-   "team":   {"type": "choice", "choice": "Facility", "index": 1,
-              "confidence": 0.978, "label_mass": 0.999},
-   "sev":    {"type": "score",  "score": 5, "expected_score": 4.80,
-              "legend": "kritisch", "confidence": 0.692,
-              "label_mass": 0.998}},
- "model": "gemma4:e2b-it-qat",
- "usage": {"input_tokens": 297, "questions": 3},
- "timing_ms": {"total": 96}}</code></pre>
-        </figure>
+          </figure>
+          <figure class="window">
+            <figcaption><span class="dots" aria-hidden="true"></span>Response, trimmed<span class="took">96&nbsp;ms</span></figcaption>
+<pre><code>{<span class="k">"answers"</span>: {
+   <span class="k">"urgent"</span>: {<span class="k">"type"</span>: <span class="s">"noul"</span>,   <span class="k">"noul"</span>: <span class="n">0.9834</span>, <span class="k">"label_mass"</span>: <span class="n">0.998</span>},
+   <span class="k">"team"</span>:   {<span class="k">"type"</span>: <span class="s">"choice"</span>, <span class="k">"choice"</span>: <span class="s">"Facility"</span>, <span class="k">"index"</span>: <span class="n">1</span>,
+              <span class="k">"confidence"</span>: <span class="n">0.978</span>, <span class="k">"label_mass"</span>: <span class="n">0.999</span>},
+   <span class="k">"sev"</span>:    {<span class="k">"type"</span>: <span class="s">"score"</span>,  <span class="k">"score"</span>: <span class="n">5</span>, <span class="k">"expected_score"</span>: <span class="n">4.80</span>,
+              <span class="k">"legend"</span>: <span class="s">"kritisch"</span>, <span class="k">"confidence"</span>: <span class="n">0.692</span>,
+              <span class="k">"label_mass"</span>: <span class="n">0.998</span>}},
+ <span class="k">"model"</span>: <span class="s">"gemma4:e2b-it-qat"</span>,
+ <span class="k">"usage"</span>: {<span class="k">"input_tokens"</span>: <span class="n">297</span>, <span class="k">"questions"</span>: <span class="n">3</span>},
+ <span class="k">"timing_ms"</span>: {<span class="k">"total"</span>: <span class="n">96</span>}}</code></pre>
+          </figure>
+        </div>
+
+        <div class="readout" aria-label="The response, read as decisions">
+          <p class="readout-title">Read as</p>
+          <div class="answer">
+            <p class="answer-head"><code>urgent</code><span>noul</span></p>
+            <p class="answer-value">0.9834</p>
+            <div class="meter" aria-hidden="true"><span style="width: 98.34%"></span></div>
+            <p class="answer-note">probability of yes</p>
+          </div>
+          <div class="answer">
+            <p class="answer-head"><code>team</code><span>choice</span></p>
+            <ul class="options">
+              <li>IT</li>
+              <li class="picked">Facility</li>
+              <li>HR</li>
+            </ul>
+            <p class="answer-note">confidence 0.978</p>
+          </div>
+          <div class="answer">
+            <p class="answer-head"><code>sev</code><span>score</span></p>
+            <p class="answer-value">kritisch <small>5 of 5</small></p>
+            <ol class="levels" aria-hidden="true">
+              <li></li><li></li><li></li><li></li><li class="picked"></li>
+            </ol>
+            <p class="answer-note">expected 4.80 · confidence 0.692</p>
+          </div>
+        </div>
       </div>
       <p class="note">Three questions, 96&nbsp;ms, on a 4&nbsp;GB model. <code>label_mass</code> is how
       much of the model’s own probability fell on the offered letters — the one sign that it was
@@ -126,46 +155,56 @@
       <h2>Get started</h2>
       <p>The service and the terminal front end are on crates.io; installing needs a Rust
       toolchain and nothing else.</p>
-<pre><code>ollama pull gemma4:e2b-it-qat     # once, 4.3 GB
-cargo install cerno-server cerno-tui
+      <figure class="window">
+        <figcaption><span class="dots" aria-hidden="true"></span>Terminal</figcaption>
+<pre><code><span class="c">ollama</span> pull gemma4:e2b-it-qat     <span class="m"># once, 4.3 GB</span>
+<span class="c">cargo</span> install cerno-server cerno-tui
 
-cerno-server                      # terminal 1: the service on 127.0.0.1:3000
-cerno-tui                         # terminal 2: the terminal front end</code></pre>
+<span class="c">cerno-server</span>                      <span class="m"># terminal 1: the service on 127.0.0.1:3000</span>
+<span class="c">cerno-tui</span>                         <span class="m"># terminal 2: the terminal front end</span></code></pre>
+      </figure>
       <p class="note">The first request takes 5–10&nbsp;s while Ollama loads the model; after that it
       is around 150&nbsp;ms. <code>http://localhost:3000/docs</code> is the Swagger UI.</p>
 
       <h3>From code</h3>
       <p>Three clients, all published as <code>cerno-sdk</code>, written by hand against the same
       OpenAPI document and tested against the same conformance cases.</p>
-      <div class="sdks">
-        <figure>
-          <figcaption>Rust · <code>cargo add cerno-sdk</code></figcaption>
-<pre><code>use cerno_sdk::Client;
+      <div class="tabs">
+        <input type="radio" name="sdk" id="sdk-rust" checked>
+        <label for="sdk-rust">Rust</label>
+        <input type="radio" name="sdk" id="sdk-python">
+        <label for="sdk-python">Python</label>
+        <input type="radio" name="sdk" id="sdk-ts">
+        <label for="sdk-ts">TypeScript</label>
 
-let client = Client::new("http://localhost:3000")?;
-let answers = client.systemone(text)
-    .noul("urgent", "Is this urgent?")
-    .choice("team", "Which team?", ["IT", "Facility"])
-    .send().await?;</code></pre>
+        <figure class="window panel panel-rust">
+          <figcaption><span class="dots" aria-hidden="true"></span><code>cargo add cerno-sdk</code></figcaption>
+<pre><code><span class="c">use</span> cerno_sdk::Client;
+
+<span class="c">let</span> client = Client::new(<span class="s">"http://localhost:3000"</span>)?;
+<span class="c">let</span> answers = client.systemone(text)
+    .noul(<span class="s">"urgent"</span>, <span class="s">"Is this urgent?"</span>)
+    .choice(<span class="s">"team"</span>, <span class="s">"Which team?"</span>, [<span class="s">"IT"</span>, <span class="s">"Facility"</span>])
+    .send().<span class="c">await</span>?;</code></pre>
         </figure>
-        <figure>
-          <figcaption>Python · <code>uv add cerno-sdk</code></figcaption>
-<pre><code>from cerno import Client
+        <figure class="window panel panel-python">
+          <figcaption><span class="dots" aria-hidden="true"></span><code>uv add cerno-sdk</code></figcaption>
+<pre><code><span class="c">from</span> cerno <span class="c">import</span> Client
 
-client = Client("http://localhost:3000")
+client = Client(<span class="s">"http://localhost:3000"</span>)
 answers = (client.systemone(text)
-    .noul("urgent", "Is this urgent?")
-    .choice("team", "Which team?", ["IT", "Facility"])
+    .noul(<span class="s">"urgent"</span>, <span class="s">"Is this urgent?"</span>)
+    .choice(<span class="s">"team"</span>, <span class="s">"Which team?"</span>, [<span class="s">"IT"</span>, <span class="s">"Facility"</span>])
     .send())</code></pre>
         </figure>
-        <figure>
-          <figcaption>TypeScript · <code>npm install cerno-sdk</code></figcaption>
-<pre><code>import { Client } from "cerno-sdk";
+        <figure class="window panel panel-ts">
+          <figcaption><span class="dots" aria-hidden="true"></span><code>npm install cerno-sdk</code></figcaption>
+<pre><code><span class="c">import</span> { Client } <span class="c">from</span> <span class="s">"cerno-sdk"</span>;
 
-const client = new Client("http://localhost:3000");
-const answers = await client.systemone(text)
-  .noul("urgent", "Is this urgent?")
-  .choice("team", "Which team?", ["IT", "Facility"])
+<span class="c">const</span> client = <span class="c">new</span> Client(<span class="s">"http://localhost:3000"</span>);
+<span class="c">const</span> answers = <span class="c">await</span> client.systemone(text)
+  .noul(<span class="s">"urgent"</span>, <span class="s">"Is this urgent?"</span>)
+  .choice(<span class="s">"team"</span>, <span class="s">"Which team?"</span>, [<span class="s">"IT"</span>, <span class="s">"Facility"</span>])
   .send();</code></pre>
         </figure>
       </div>
