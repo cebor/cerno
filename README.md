@@ -1,8 +1,37 @@
-# cerno
+<p align="center">
+  <img src="https://cebor.github.io/cerno/logo.svg" alt="cerno logo" width="112" height="112">
+</p>
 
-Typed decisions from a locally hosted model. Three primitives:
+<h1 align="center">cerno</h1>
 
-| | | |
+<p align="center">
+  <strong>Typed decisions from a locally hosted model.</strong><br>
+  <em>cernere</em>, Latin: to sift, to distinguish, to decide.
+</p>
+
+<p align="center">
+  <a href="https://github.com/cebor/cerno/actions/workflows/ci.yml"><img src="https://github.com/cebor/cerno/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://crates.io/crates/cerno-server"><img src="https://img.shields.io/crates/v/cerno-server" alt="crates.io"></a>
+  <a href="https://pypi.org/project/cerno-sdk/"><img src="https://img.shields.io/pypi/v/cerno-sdk" alt="PyPI"></a>
+  <a href="https://www.npmjs.com/package/cerno-sdk"><img src="https://img.shields.io/npm/v/cerno-sdk" alt="npm"></a>
+  <a href="https://cebor.github.io/cerno/api/"><img src="https://img.shields.io/badge/docs-api-1e1b4b" alt="API docs"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-f59e0b" alt="MIT licence"></a>
+</p>
+
+<p align="center">
+  <a href="https://cebor.github.io/cerno/">Website</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#getting-started">Getting started</a> ·
+  <a href="#the-terminal-front-end">Terminal front end</a> ·
+  <a href="#choosing-a-model">Choosing a model</a> ·
+  <a href="#configuration">Configuration</a> ·
+  <a href="#hosts">Hosts</a> ·
+  <a href="#limits">Limits</a>
+</p>
+
+Three primitives:
+
+| Primitive | Asks | Returns |
 |---|---|---|
 | **noul** | how likely the answer is yes | `0.0 .. 1.0` |
 | **choice** | which one of up to 20 options | the option, plus a probability for each |
@@ -11,8 +40,6 @@ Typed decisions from a locally hosted model. Three primitives:
 Everything runs against a model on your own machine — Ollama by default, or vLLM, llama.cpp,
 LM Studio or anything else that speaks OpenAI's API. Nothing leaves it unless you point it at
 a remote endpoint.
-
-*cernere*, Latin: to sift, to distinguish, to decide.
 
 ```bash
 curl localhost:3000/v1/systemone -H 'content-type: application/json' -d '{
@@ -153,8 +180,9 @@ The Python package installs as `cerno-sdk` and imports as `cerno`.
 All three are written by hand against `spec/openapi.json` and tested against the same
 [conformance cases](spec/conformance/cases.json), so they cannot drift apart silently.
 
-The API documentation of every crate, with links to the Python and TypeScript READMEs, is at
-[cebor.github.io/cerno](https://cebor.github.io/cerno/).
+The website is [cebor.github.io/cerno](https://cebor.github.io/cerno/); the API documentation of
+every crate, with links to the Python and TypeScript READMEs, is under
+[/api](https://cebor.github.io/cerno/api/).
 
 ## The terminal front end
 
@@ -300,6 +328,7 @@ crates/
 sdks/python      uv package `cerno-sdk`, imported as `cerno`
 sdks/typescript  npm package `cerno-sdk`
 spec/            openapi.json + conformance cases
+site/            the website, published with the API docs by docs.yml
 ```
 
 `ModelHost` is the seam between cerno and a runtime. It knows nothing about noul, choice or

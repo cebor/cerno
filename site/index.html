@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<!-- The website, published by .github/workflows/docs.yml at the root of cebor.github.io/cerno,
+     with the rustdoc of every crate under api/. Hand-written, no build step, no scripts, no
+     external requests. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>cerno — typed decisions from a locally hosted model</title>
+  <meta name="description" content="noul, choice and score: yes/no, pick-one and rubric answers read from a local model's own probability distribution over a single token.">
+  <link rel="icon" href="logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar">
+    <a class="brand" href="./"><img src="logo.svg" alt="" width="28" height="28">cerno</a>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#start">Get started</a>
+      <a href="api/">API docs</a>
+      <a href="https://github.com/cebor/cerno">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <img class="hero-logo" src="logo.svg" alt="" width="96" height="96">
+      <h1>Typed decisions from a locally hosted&nbsp;model.</h1>
+      <p class="lead">Ask yes/no, pick-one and rubric questions. cerno reads the answer from the
+      model’s own probability distribution over a single token — nothing to parse, no number the
+      model was asked to invent, and nothing leaves your machine.</p>
+      <p class="actions">
+        <a class="button primary" href="#start">Get started</a>
+        <a class="button" href="api/">API docs</a>
+        <a class="button" href="https://github.com/cebor/cerno">GitHub</a>
+      </p>
+      <p class="motto"><em>cernere</em>, Latin: to sift, to distinguish, to decide.</p>
+    </section>
+
+    <section class="primitives">
+      <article>
+        <h2><code>noul</code></h2>
+        <p>How likely the answer is yes.</p>
+        <p class="returns"><code>0.0 .. 1.0</code></p>
+      </article>
+      <article>
+        <h2><code>choice</code></h2>
+        <p>Which one of up to 20 options.</p>
+        <p class="returns">the option, plus a probability for each</p>
+      </article>
+      <article>
+        <h2><code>score</code></h2>
+        <p>Where on a rubric of 2–10 levels.</p>
+        <p class="returns">the level, its legend, and a weighted mean</p>
+      </article>
+    </section>
+
+    <section id="example">
+      <h2>Three questions, one request</h2>
+      <div class="pair">
+        <figure>
+          <figcaption>Request</figcaption>
+<pre><code>curl localhost:3000/v1/systemone \
+  -H 'content-type: application/json' -d '{
+  "state": "Ticket: Serverraum-Klima ausgefallen, 31 Grad und steigend.",
+  "questions": [
+    {"id": "urgent", "noul": "Ist das dringend?"},
+    {"id": "team", "choice": {"question": "Welches Team?",
+                              "options": ["IT", "Facility", "HR"]}},
+    {"id": "sev",  "score":  {"question": "Wie schwer?",
+       "levels": ["unkritisch", "gering", "mittel", "hoch", "kritisch"]}}
+  ]}'</code></pre>
+        </figure>
+        <figure>
+          <figcaption>Response, trimmed</figcaption>
+<pre><code>{"answers": {
+   "urgent": {"type": "noul",   "noul": 0.9834, "label_mass": 0.998},
+   "team":   {"type": "choice", "choice": "Facility", "index": 1,
+              "confidence": 0.978, "label_mass": 0.999},
+   "sev":    {"type": "score",  "score": 5, "expected_score": 4.80,
+              "legend": "kritisch", "confidence": 0.692,
+              "label_mass": 0.998}},
+ "model": "gemma4:e2b-it-qat",
+ "usage": {"input_tokens": 297, "questions": 3},
+ "timing_ms": {"total": 96}}</code></pre>
+        </figure>
+      </div>
+      <p class="note">Three questions, 96&nbsp;ms, on a 4&nbsp;GB model. <code>label_mass</code> is how
+      much of the model’s own probability fell on the offered letters — the one sign that it was
+      about to write something else.</p>
+    </section>
+
+    <section id="how">
+      <h2>How it works</h2>
+      <p>A generative model answers by writing words, and then something has to parse the words
+      back into a decision. cerno never lets it get that far.</p>
+      <ol class="steps">
+        <li><strong>Letter the options.</strong> Each question becomes a short prompt whose options
+        are labelled <code>A</code>, <code>B</code>, <code>C</code>.</li>
+        <li><strong>Ask for one token.</strong> The model generates exactly one, in one forward
+        pass, whatever the number of options.</li>
+        <li><strong>Read the distribution.</strong> Instead of taking the token, cerno reads
+        <code>P(A)</code>, <code>P(B)</code>, <code>P(C)</code> from the logprobs.</li>
+        <li><strong>Fold, floor, calibrate.</strong> Tokenizer variants of a label are combined, a
+        label that fell out of the window is bounded and flagged, and temperature scaling makes
+        the confidences mean something.</li>
+      </ol>
+      <p>That is where the speed comes from — one token, not a sentence — and where the
+      probabilities come from, since they are the model’s own.</p>
+
+      <h3>What the measurements forced</h3>
+      <table>
+        <thead><tr><th>Measured</th><th>Consequence</th></tr></thead>
+        <tbody>
+          <tr><td>The first generated token was <code>&lt;|channel|&gt;</code>, a chat-template control token</td><td><code>think: false</code> on every request</td></tr>
+          <tr><td>The default <code>top_k: 40</code> truncates the distribution <em>before</em> logprobs are reported, and renormalises what survives</td><td><code>top_k: 0, top_p: 1, min_p: 0</code> are pinned and not configurable</td></tr>
+          <tr><td>“Nein” is not one token — it arrives as <code>Ne</code> + <code>in</code> — and “Ja” competes with <code>JA</code>, <code>&nbsp;Ja</code>, <code>ja</code></td><td>Single-letter labels only; variants of one label are folded in probability space</td></tr>
+          <tr><td>When a model is certain, the losing label drops out of the top-20 window entirely</td><td>The weakest reported logprob becomes an upper bound, and the answer is flagged <code>truncated</code></td></tr>
+          <tr><td><code>gemma4:26b</code> answers clear cases at <code>P = 1.0000</code></td><td>Temperature scaling, per request or per model</td></tr>
+          <tr><td>A 26B model answers in 87&nbsp;ms; a 4&nbsp;GB one in 36&nbsp;ms</td><td>A small model is the default</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="start">
+      <h2>Get started</h2>
+      <p>The service and the terminal front end are on crates.io; installing needs a Rust
+      toolchain and nothing else.</p>
+<pre><code>ollama pull gemma4:e2b-it-qat     # once, 4.3 GB
+cargo install cerno-server cerno-tui
+
+cerno-server                      # terminal 1: the service on 127.0.0.1:3000
+cerno-tui                         # terminal 2: the terminal front end</code></pre>
+      <p class="note">The first request takes 5–10&nbsp;s while Ollama loads the model; after that it
+      is around 150&nbsp;ms. <code>http://localhost:3000/docs</code> is the Swagger UI.</p>
+
+      <h3>From code</h3>
+      <p>Three clients, all published as <code>cerno-sdk</code>, written by hand against the same
+      OpenAPI document and tested against the same conformance cases.</p>
+      <div class="sdks">
+        <figure>
+          <figcaption>Rust · <code>cargo add cerno-sdk</code></figcaption>
+<pre><code>use cerno_sdk::Client;
+
+let client = Client::new("http://localhost:3000")?;
+let answers = client.systemone(text)
+    .noul("urgent", "Is this urgent?")
+    .choice("team", "Which team?", ["IT", "Facility"])
+    .send().await?;</code></pre>
+        </figure>
+        <figure>
+          <figcaption>Python · <code>uv add cerno-sdk</code></figcaption>
+<pre><code>from cerno import Client
+
+client = Client("http://localhost:3000")
+answers = (client.systemone(text)
+    .noul("urgent", "Is this urgent?")
+    .choice("team", "Which team?", ["IT", "Facility"])
+    .send())</code></pre>
+        </figure>
+        <figure>
+          <figcaption>TypeScript · <code>npm install cerno-sdk</code></figcaption>
+<pre><code>import { Client } from "cerno-sdk";
+
+const client = new Client("http://localhost:3000");
+const answers = await client.systemone(text)
+  .noul("urgent", "Is this urgent?")
+  .choice("team", "Which team?", ["IT", "Facility"])
+  .send();</code></pre>
+        </figure>
+      </div>
+    </section>
+
+    <section id="hosts">
+      <h2>Runs where your model runs</h2>
+      <p>Every runtime gets the request fields that keep its distribution untruncated, and every
+      host gets the same three primitives. Pick one with <code>CERNO_HOST</code>.</p>
+      <ul class="hosts">
+        <li><strong>Ollama</strong><span>default, native API</span></li>
+        <li><strong>vLLM</strong><span>OpenAI-compatible</span></li>
+        <li><strong>llama.cpp</strong><span><code>llama-server</code></span></li>
+        <li><strong>LM Studio</strong><span>OpenAI-compatible</span></li>
+        <li><strong>OpenAI API</strong><span>any compatible server</span></li>
+        <li><strong>Ollama System One</strong><span><code>nimble</code>, <code>tev1</code></span></li>
+      </ul>
+      <p>Which model to use is measured, not assumed: a 4&nbsp;GB model matches the 26B reference’s
+      accuracy and is better calibrated. See the
+      <a href="https://github.com/cebor/cerno/blob/main/docs/model-selection.md">model comparison</a>.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/cebor/cerno">GitHub</a> ·
+      <a href="api/">API docs</a> ·
+      <a href="https://crates.io/crates/cerno-server">crates.io</a> ·
+      <a href="https://pypi.org/project/cerno-sdk/">PyPI</a> ·
+      <a href="https://www.npmjs.com/package/cerno-sdk">npm</a> ·
+      <a href="https://github.com/cebor/cerno/blob/main/LICENSE">MIT licence</a>
+    </p>
+  </footer>
+</body>
+</html>
