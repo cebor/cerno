@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="cerno">
+  <!-- logo.svg without the rounded corners, for the README: GitHub paints a grey background
+       behind README images, which showed through logo.svg's transparent corners. GitHub rounds
+       this one itself. -->
+  <rect width="64" height="64" fill="#1e1b4b"/>
+  <rect x="11" y="40" width="8" height="12" rx="2" fill="#818cf8" opacity=".55"/>
+  <rect x="23" y="13" width="8" height="39" rx="2" fill="#f59e0b"/>
+  <rect x="35" y="33" width="8" height="19" rx="2" fill="#818cf8" opacity=".55"/>
+  <rect x="47" y="45" width="8" height="7" rx="2" fill="#818cf8" opacity=".55"/>
+</svg>

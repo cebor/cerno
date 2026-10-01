@@ -271,8 +271,10 @@ hand bump without regenerating the spec also fails `the_checked_in_spec_matches_
 external requests) at the root of GitHub Pages and `cargo doc --workspace` under `api/`. Links in
 `site/` stay relative, because Pages serves it under `/cerno/`. Every fact on the page is copied
 from the README; the benchmark table is linked, not copied, so it cannot drift. `site/logo.svg` is
-the one logo; the README loads it from the Pages URL because the README is also every crate's
-crates.io page, where a relative image would not resolve.
+the logo; the README loads `site/logo-square.svg` from the Pages URL instead, because the README
+is also every crate's crates.io page, where a relative image would not resolve, and because GitHub
+paints a grey background behind README images that showed through `logo.svg`'s transparent
+corners. GitHub rounds the square one itself.
 
 Stable rustdoc writes no root `index.html`, so `docs/rustdoc-index.html` is copied to
 `api/index.html`; it is the one place the Python and TypeScript READMEs are linked next to the

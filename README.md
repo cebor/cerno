@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://cebor.github.io/cerno/logo.svg" alt="cerno logo" width="112" height="112">
+  <img src="https://cebor.github.io/cerno/logo-square.svg" alt="cerno logo" width="112" height="112">
 </p>
 
 <h1 align="center">cerno</h1>
