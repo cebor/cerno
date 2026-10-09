@@ -9,14 +9,17 @@
 //! Three adapters cover the runtimes: [`OllamaHost`] for Ollama's native API,
 //! [`OpenAiCompatHost`] for everything speaking `/v1/chat/completions`, and [`SystemOneHost`]
 //! for Ollama's `/v1/systemone`, which writes its own prompt for its decision models. [`connect`]
-//! picks one from a [`HostKind`].
+//! picks one from a [`HostKind`]; for [`HostKind::Ollama`] it builds an [`OllamaRouter`] over
+//! the two Ollama adapters, which sends each model to the endpoint made for it.
 
 mod ollama;
 mod openai;
+mod router;
 mod systemone;
 
 pub use ollama::OllamaHost;
 pub use openai::{Flavour, OpenAiCompatHost};
+pub use router::OllamaRouter;
 pub use systemone::SystemOneHost;
 
 use async_trait::async_trait;
@@ -32,8 +35,6 @@ pub enum HostKind {
     Vllm,
     LlamaCpp,
     LmStudio,
-    /// Ollama's `/v1/systemone`, answered by its decision models (`nimble`, `tev1`).
-    SystemOne,
 }
 
 impl HostKind {
@@ -45,13 +46,12 @@ impl HostKind {
             HostKind::Vllm => "http://localhost:8000/v1",
             HostKind::LlamaCpp => "http://localhost:8080/v1",
             HostKind::LmStudio => "http://localhost:1234/v1",
-            HostKind::SystemOne => "http://localhost:11434",
         }
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("unknown host {0:?}; expected one of ollama, openai, vllm, llamacpp, lmstudio, systemone")]
+#[error("unknown host {0:?}; expected one of ollama, openai, vllm, llamacpp, lmstudio")]
 pub struct UnknownHostKind(String);
 
 impl std::str::FromStr for HostKind {
@@ -64,7 +64,6 @@ impl std::str::FromStr for HostKind {
             "vllm" => Ok(HostKind::Vllm),
             "llamacpp" | "llama.cpp" => Ok(HostKind::LlamaCpp),
             "lmstudio" => Ok(HostKind::LmStudio),
-            "systemone" => Ok(HostKind::SystemOne),
             _ => Err(UnknownHostKind(s.to_string())),
         }
     }
@@ -78,13 +77,11 @@ impl std::fmt::Display for HostKind {
             HostKind::Vllm => "vllm",
             HostKind::LlamaCpp => "llamacpp",
             HostKind::LmStudio => "lmstudio",
-            HostKind::SystemOne => "systemone",
         })
     }
 }
 
-/// Build the adapter for `kind`. Ollama and its `/v1/systemone` take no API key; the others send
-/// it as a bearer token.
+/// Build the adapter for `kind`. Ollama takes no API key; the others send it as a bearer token.
 pub fn connect(
     kind: HostKind,
     url: &str,
@@ -92,8 +89,7 @@ pub fn connect(
     timeout: Duration,
 ) -> Result<Arc<dyn ModelHost>, HostError> {
     let flavour = match kind {
-        HostKind::Ollama => return Ok(Arc::new(OllamaHost::new(url, timeout)?)),
-        HostKind::SystemOne => return Ok(Arc::new(SystemOneHost::new(url, timeout)?)),
+        HostKind::Ollama => return Ok(Arc::new(OllamaRouter::new(url, timeout)?)),
         HostKind::OpenAi => Flavour::Generic,
         HostKind::Vllm => Flavour::Vllm,
         HostKind::LlamaCpp => Flavour::LlamaCpp,
@@ -303,7 +299,6 @@ mod tests {
             HostKind::Vllm,
             HostKind::LlamaCpp,
             HostKind::LmStudio,
-            HostKind::SystemOne,
         ] {
             assert_eq!(kind.to_string().parse::<HostKind>().unwrap(), kind);
         }
@@ -418,12 +413,6 @@ mod tests {
                 .unwrap()
                 .name(),
             "vllm"
-        );
-        assert_eq!(
-            connect(HostKind::SystemOne, "http://x", None, timeout)
-                .unwrap()
-                .name(),
-            "systemone"
         );
     }
 }

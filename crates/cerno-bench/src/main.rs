@@ -14,17 +14,18 @@
 //!               [--host-kind ollama|openai|vllm|llamacpp|lmstudio]
 //!               [--systemone a,b,c] [--systemone-host url]
 //!
-//! `--systemone` runs the listed models through Ollama's `/v1/systemone` via cerno's `systemone`
-//! host instead of its letter prompt, at `--systemone-host` (Ollama's default address unless
-//! given). Those rows are measured for comparison and never picked as the verdict.
+//! `--systemone` runs the listed models through Ollama's `/v1/systemone` via cerno's
+//! `SystemOneHost` instead of its letter prompt, at `--systemone-host` (Ollama's default address
+//! unless given). Those rows are measured for comparison and never picked as the verdict.
 //!
 //! An API key for the OpenAI-compatible hosts comes from `CERNO_HOST_API_KEY`.
 
 use cerno_core::{Engine, EngineError, labels};
-use cerno_host::HostKind;
+use cerno_host::{HostKind, ModelHost, OllamaHost, SystemOneHost};
 use cerno_types::{Answer, Calibration, ChoiceSpec, Question, QuestionKind, ScoreSpec};
 use serde::Deserialize;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Deserialize)]
@@ -387,16 +388,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let host_kind: HostKind = arg(&args, "--host-kind")
         .unwrap_or_else(|| "ollama".into())
         .parse()?;
-    if host_kind == HostKind::SystemOne {
-        eprintln!(
-            "--host-kind systemone would report Ollama's /v1/systemone as cerno's own prompt; \
-             pass those models to --systemone instead"
-        );
-        std::process::exit(1);
-    }
     let host_url = arg(&args, "--host").unwrap_or_else(|| host_kind.default_url().into());
     let systemone_url =
-        arg(&args, "--systemone-host").unwrap_or_else(|| HostKind::SystemOne.default_url().into());
+        arg(&args, "--systemone-host").unwrap_or_else(|| HostKind::Ollama.default_url().into());
 
     let dataset: Dataset = serde_json::from_str(&std::fs::read_to_string(&dataset_path)?)?;
     let problems: Vec<String> = dataset
@@ -413,12 +407,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("{} cases from {dataset_path}", dataset.cases.len());
 
-    let host = cerno_host::connect(
-        host_kind,
-        &host_url,
-        std::env::var("CERNO_HOST_API_KEY").ok(),
-        Duration::from_secs(120),
-    )?;
+    // The letter prompt for every model, decision models included: `connect` would send those
+    // to `/v1/systemone` and report Ollama's prompt as cerno's.
+    let host: Arc<dyn ModelHost> = match host_kind {
+        HostKind::Ollama => Arc::new(OllamaHost::new(&host_url, Duration::from_secs(120))?),
+        _ => cerno_host::connect(
+            host_kind,
+            &host_url,
+            std::env::var("CERNO_HOST_API_KEY").ok(),
+            Duration::from_secs(120),
+        )?,
+    };
     // Keep each model resident for the length of its run; unloading between cases would measure
     // model loading, not inference.
     let engine = Engine::new(host, Some("5m".to_string()));
@@ -426,12 +425,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None
     } else {
         Some(Engine::new(
-            cerno_host::connect(
-                HostKind::SystemOne,
+            Arc::new(SystemOneHost::new(
                 &systemone_url,
-                None,
                 Duration::from_secs(120),
-            )?,
+            )?),
             Some("5m".to_string()),
         ))
     };

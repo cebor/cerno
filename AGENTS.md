@@ -59,12 +59,20 @@ reports `top_logprobs` at all, and whether llama.cpp honours `post_sampling_prob
 endpoint, are the two open questions. A host without logprobs fails loudly as `NoLogprobs`.
 
 One host per process, chosen by `CERNO_HOST` through `cerno_host::connect`. A second runtime
-is a second instance, not a routing table.
+is a second instance, not a routing table. Within Ollama, `OllamaRouter` picks the endpoint per
+model, which is a property of the model, not a second runtime.
 
-## `systemone` is a host that is asked questions, not prompts
+## Ollama's decision models are asked questions, not prompts
+
+`crates/cerno-host/src/router.rs` is what `CERNO_HOST=ollama` builds. It asks `/api/show` once
+per model and sends every model whose `capabilities` contain `decision` (`nimble`, `tev1`) to
+`SystemOneHost`, everything else to `OllamaHost`. A refused `/api/show` (an unknown model, an
+old Ollama) answers "not a decision model" and is not cached, so `/api/chat` still produces the
+404 behind `UnknownModel`, and a model pulled later is recognised on its next question. There is
+no switch to force either path; `CERNO_HOST=systemone` is gone and fails at startup.
 
 `crates/cerno-host/src/systemone.rs` sends each question to Ollama's `/v1/systemone`, where
-Ollama writes the prompt for its decision models (`nimble`, `tev1`). It reads
+Ollama writes the prompt for its decision models. It reads
 `FirstTokenRequest::offer` — the question id, state, text, `Shape` and `(label, text)` options —
 and ignores the rendered prompt. It answers with a distribution whose tokens are exactly the
 offered labels at `ln p` (clamped at `1e-12`, since `raw_logprobs` is JSON and JSON has no
@@ -184,8 +192,9 @@ for it (`nimble`, `tev1`), through the same `SystemOneHost` the service uses and
 `Engine`, so accuracy, agreement and the temperature fit compare like with like. Fidelity and
 Truncated are `NaN` there — the adapter's top token is always a label, so fidelity would be a
 meaningless 100% — and `pick_winner` filters on `Via::Engine` explicitly rather than relying on
-`NaN >= 1.0` being false. `--host-kind systemone` is refused, because it would report Ollama's
-prompt as cerno's own.
+`NaN >= 1.0` being false. The benchmark builds `OllamaHost` and `SystemOneHost` directly rather
+than through `connect`, because the router would send a decision model on the letter-prompt rows
+to `/v1/systemone` and report Ollama's prompt as cerno's own.
 
 ## Two things that will bite in a live test
 

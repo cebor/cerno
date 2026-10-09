@@ -447,11 +447,26 @@ async fn an_openai_compatible_host_answers_the_same_request() {
     assert_eq!(body["answers"]["team"]["choice"], "Facility", "{body}");
 }
 
-/// With `CERNO_HOST=systemone` every question goes to Ollama's `/v1/systemone` as itself, and
-/// cerno's own response comes back unchanged in shape.
+/// With the default Ollama host, a model Ollama lists as a decision model has every question
+/// sent to `/v1/systemone` as itself, and cerno's own response comes back unchanged in shape.
 #[tokio::test]
-async fn the_systemone_host_answers_every_primitive() {
+async fn a_decision_model_is_answered_through_systemone() {
     let mut server = mockito::Server::new_async().await;
+    // The three questions run concurrently, so each may ask before the first answer is cached.
+    let show = server
+        .mock("POST", "/api/show")
+        .match_body(mockito::Matcher::PartialJson(
+            json!({"model": "gemma4:e2b-it-qat"}),
+        ))
+        .with_body(json!({"capabilities": ["decision"]}).to_string())
+        .expect_at_least(1)
+        .create_async()
+        .await;
+    let chat = server
+        .mock("POST", "/api/chat")
+        .expect(0)
+        .create_async()
+        .await;
     let mut mocks = Vec::new();
     for (id, ask, answer) in [
         (
@@ -490,11 +505,8 @@ async fn the_systemone_host_answers_every_primitive() {
         );
     }
 
-    let mut config = config(&server.url(), false);
-    config.host = HostKind::SystemOne;
-
     let (status, body) = post(
-        app(config),
+        app(config(&server.url(), false)),
         "/v1/systemone",
         json!({
             "state": "Printer is jammed.",
@@ -511,6 +523,8 @@ async fn the_systemone_host_answers_every_primitive() {
     for mock in mocks {
         mock.assert_async().await;
     }
+    show.assert_async().await;
+    chat.assert_async().await;
     let answers = &body["answers"];
     assert!(
         (answers["urgent"]["noul"].as_f64().unwrap() - 0.9).abs() < 1e-9,
